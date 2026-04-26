@@ -32,11 +32,12 @@ idf_component_register(
         "ros_interface"
         "utils"
 
-	REQUIRES
-	    esp_wifi
-	    esp_event
-	    esp_netif
-	    nvs_flash
-	    esp_driver_uart
+		REQUIRES
+		    esp_wifi
+		    esp_event
+		    esp_netif
+		    nvs_flash
+		    esp_driver_uart
+            esp_driver_mcpwm
         esp_http_server
 )

@@ -8,6 +8,7 @@
 #include "app_config/usb_config_cli.h"
 #include "network/wifi_manager.h"
 #include "control/diff_drive_controller.h"
+#include "control/servo_controller.h"
 
 void app_main(void)
 {
@@ -20,6 +21,9 @@ void app_main(void)
 
     usb_cli_start();
     printf("cli start ok\n");
+
+    servo_controller_init();
+    printf("servo init ok\n");
 
     diff_drive_init();
     printf("diff drive init ok\n");
