@@ -1,5 +1,6 @@
 #include "network/web_server.h"
 #include "control/diff_drive_controller.h"
+#include "control/servo_controller.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include <string.h>
@@ -16,17 +17,36 @@ static esp_err_t root_get_handler(httpd_req_t *req)
         "<meta charset=\"UTF-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
         "<title>Carbot Control</title>"
+        "<style>"
+        "body{margin:0;font-family:Arial,sans-serif;background:#f4f6fb;color:#1f2937;}"
+        ".page{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:24px;box-sizing:border-box;}"
+        "h1{margin:0;font-size:28px;}"
+        ".pad{position:relative;width:260px;height:260px;}"
+        ".btn{border:none;background:#2563eb;color:#fff;font-size:18px;font-weight:600;cursor:pointer;box-shadow:0 10px 24px rgba(37,99,235,0.24);}"
+        ".btn:active{transform:scale(0.97);}"
+        ".circle{position:absolute;width:74px;height:74px;border-radius:50%;}"
+        ".up{top:0;left:50%;transform:translateX(-50%);}"
+        ".left{top:50%;left:0;transform:translateY(-50%);}"
+        ".right{top:50%;right:0;transform:translateY(-50%);}"
+        ".down{bottom:0;left:50%;transform:translateX(-50%);}"
+        ".center{top:50%;left:50%;transform:translate(-50%,-50%);background:#0f766e;box-shadow:0 10px 24px rgba(15,118,110,0.24);}"
+        ".stop{width:74px;height:74px;border-radius:16px;background:#dc2626;box-shadow:0 10px 24px rgba(220,38,38,0.24);}"
+        "#status{min-height:24px;margin:0;font-size:18px;font-weight:500;}"
+        "</style>"
         "</head>"
         "<body>"
+        "<div class='page'>"
         "<h1>Carbot Control</h1>"
-        "<div style='display:flex;flex-direction:column;gap:10px;width:200px;'>"
-        "<button onclick=\"sendCmd('forward')\">Forward</button>"
-        "<button onclick=\"sendCmd('backward')\">Backward</button>"
-        "<button onclick=\"sendCmd('left')\">Left</button>"
-        "<button onclick=\"sendCmd('right')\">Right</button>"
-        "<button onclick=\"sendCmd('stop')\">Stop</button>"
+        "<div class='pad'>"
+        "<button class='btn circle up' onclick=\"sendCmd('forward')\">Up</button>"
+        "<button class='btn circle left' onclick=\"sendCmd('left')\">Left</button>"
+        "<button class='btn circle center' onclick=\"sendCmd('center')\">Center</button>"
+        "<button class='btn circle right' onclick=\"sendCmd('right')\">Right</button>"
+        "<button class='btn circle down' onclick=\"sendCmd('backward')\">Down</button>"
         "</div>"
+        "<button class='btn stop' onclick=\"sendCmd('stop')\">Stop</button>"
         "<p id='status'>Ready</p>"
+        "</div>"
         "<script>"
         "function sendCmd(cmd){"
         "  fetch('/cmd?move=' + cmd)"
@@ -63,9 +83,15 @@ static esp_err_t cmd_get_handler(httpd_req_t *req)
             } 
             else if (strcmp(move, "left") == 0) {
                 diff_drive_stop();
+                servo_controller_turn_left();
             }
             else if (strcmp(move, "right") == 0) {
                 diff_drive_stop();
+                servo_controller_turn_right();
+            }
+            else if (strcmp(move, "center") == 0) {
+                diff_drive_stop();
+                servo_controller_center();
             }
             else {
                 ESP_LOGW(TAG, "unknown move: %s", move);

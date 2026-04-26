@@ -8,7 +8,7 @@ extern "C" {
 #define SERVO_STEER_MAX_ANGLE_DEG        (35)
 #define SERVO_STEER_LEFT_ANGLE_DEG       (25)
 #define SERVO_STEER_RIGHT_ANGLE_DEG      (-25)
-#define SERVO_STEER_CENTER_OFFSET_DEG    (0)
+#define SERVO_STEER_CENTER_OFFSET_DEG    (-10)
 #define SERVO_STEER_DIRECTION_SIGN       (-1)
 
 void servo_controller_init(void);
