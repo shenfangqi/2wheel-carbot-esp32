@@ -90,7 +90,6 @@ static esp_err_t cmd_get_handler(httpd_req_t *req)
                 servo_controller_turn_right();
             }
             else if (strcmp(move, "center") == 0) {
-                diff_drive_stop();
                 servo_controller_center();
             }
             else {
