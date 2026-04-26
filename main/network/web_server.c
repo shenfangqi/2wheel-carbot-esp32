@@ -23,7 +23,6 @@ static esp_err_t root_get_handler(httpd_req_t *req)
         "h1{margin:0;font-size:28px;}"
         ".pad{position:relative;width:260px;height:260px;}"
         ".btn{border:none;background:#2563eb;color:#fff;font-size:18px;font-weight:600;cursor:pointer;box-shadow:0 10px 24px rgba(37,99,235,0.24);}"
-        ".btn:active{transform:scale(0.97);}"
         ".circle{position:absolute;width:74px;height:74px;border-radius:16px;}"
         ".up{top:0;left:50%;transform:translateX(-50%);}"
         ".left{top:50%;left:0;transform:translateY(-50%);}"
@@ -82,11 +81,9 @@ static esp_err_t cmd_get_handler(httpd_req_t *req)
                 diff_drive_stop();
             } 
             else if (strcmp(move, "left") == 0) {
-                diff_drive_stop();
                 servo_controller_turn_left();
             }
             else if (strcmp(move, "right") == 0) {
-                diff_drive_stop();
                 servo_controller_turn_right();
             }
             else if (strcmp(move, "center") == 0) {
