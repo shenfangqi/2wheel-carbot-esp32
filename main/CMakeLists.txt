@@ -16,12 +16,15 @@ idf_component_register(
 
         "control/servo_controller.c"
         "control/diff_drive_controller.c"
+        "control/motor_pid_controller.c"
         "control/odometry_estimator.c"
         "control/safety_manager.c"
 
         "ros_interface/ros_publishers.c"
         "ros_interface/ros_subscribers.c"
         "ros_interface/ros_executor.c"
+
+        "utils/telemetry_buffer.c"
 
     INCLUDE_DIRS
         "."
@@ -33,6 +36,9 @@ idf_component_register(
         "utils"
 
 		REQUIRES
+            driver
+            icm42670p
+            esp_timer
 		    esp_wifi
 		    esp_event
 		    esp_netif

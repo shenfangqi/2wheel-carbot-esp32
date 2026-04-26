@@ -1,5 +1,6 @@
 #include "app_config.h"
 #include "config_store.h"
+#include "control/servo_controller.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -12,6 +13,7 @@ void app_config_init(void)
     strcpy(g_config.wifi_password, "12345678");
     strcpy(g_config.agent_ip, "192.168.1.100");
     g_config.agent_port = 8888;
+    g_config.servo_center_offset_deg = SERVO_STEER_DEFAULT_CENTER_OFFSET_DEG;
 
     // 覆盖为NVS
     config_store_load(&g_config);
@@ -22,4 +24,9 @@ void app_config_init(void)
 app_config_t* app_config_get(void)
 {
     return &g_config;
+}
+
+void app_config_save(void)
+{
+    config_store_save(&g_config);
 }
