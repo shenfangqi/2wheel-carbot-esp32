@@ -10,6 +10,25 @@
 #include "control/diff_drive_controller.h"
 #include "control/servo_controller.h"
 
+static void app_servo_startup_test(void)
+{
+    printf("servo test: center\n");
+    servo_controller_center();
+    vTaskDelay(pdMS_TO_TICKS(800));
+
+    printf("servo test: left\n");
+    servo_controller_turn_left();
+    vTaskDelay(pdMS_TO_TICKS(800));
+
+    printf("servo test: right\n");
+    servo_controller_turn_right();
+    vTaskDelay(pdMS_TO_TICKS(800));
+
+    printf("servo test: center\n");
+    servo_controller_center();
+    vTaskDelay(pdMS_TO_TICKS(800));
+}
+
 void app_main(void)
 {
     nvs_flash_init();
@@ -24,6 +43,8 @@ void app_main(void)
 
     servo_controller_init();
     printf("servo init ok\n");
+    app_servo_startup_test();
+    printf("servo startup test ok\n");
 
     diff_drive_init();
     printf("diff drive init ok\n");
