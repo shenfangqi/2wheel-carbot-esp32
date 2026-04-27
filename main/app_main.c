@@ -7,9 +7,11 @@
 #include "app_config/app_config.h"
 #include "app_config/usb_config_cli.h"
 #include "network/wifi_manager.h"
-#include "control/diff_drive_controller.h"
+#include "control/ackermann_controller.h"
+#include "control/command_mux.h"
 #include "control/motor_pid_controller.h"
 #include "control/servo_controller.h"
+#include "ros_interface/ros_executor.h"
 #include "icm42670p.h"
 #include "utils/telemetry_buffer.h"
 
@@ -67,6 +69,7 @@ void app_main(void)
     app_config_t *config = NULL;
 
     nvs_flash_init();
+    esp_log_level_set("*", ESP_LOG_ERROR);
 
     printf("=== CARBOT START ===\n");
 
@@ -82,8 +85,10 @@ void app_main(void)
     servo_controller_center();
     printf("servo init ok\n");
 
-    diff_drive_init();
-    printf("diff drive init ok\n");
+    ackermann_controller_init();
+    printf("ackermann controller init ok\n");
+    command_mux_init();
+    printf("command mux init ok\n");
     motor_pid_controller_set_pid(0.8f, 0.05f, 0.0f);
     printf("motor pid init ok\n");
     telemetry_buffer_init();
@@ -91,6 +96,9 @@ void app_main(void)
 
     wifi_manager_init();
     printf("wifi manager init ok\n");
+
+    ros_executor_start();
+    printf("ros executor init ok\n");
 
     Icm42670p_Init();
     printf("imu init start\n");

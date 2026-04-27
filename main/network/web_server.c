@@ -1,6 +1,6 @@
 #include "network/web_server.h"
 #include "app_config/app_config.h"
-#include "control/diff_drive_controller.h"
+#include "control/command_mux.h"
 #include "control/servo_controller.h"
 #include "utils/telemetry_buffer.h"
 #include "esp_http_server.h"
@@ -12,6 +12,15 @@
 
 static const char *TAG = "web_server";
 static httpd_handle_t s_server = NULL;
+static const float WEB_MANUAL_LINEAR_MPS = 0.20f;
+static const float WEB_MANUAL_ANGULAR_RPS = 2.0f;
+static float s_manual_linear_mps = 0.0f;
+static float s_manual_angular_rps = 0.0f;
+
+static void web_server_apply_manual_cmd(void)
+{
+    command_mux_apply_web_cmd(s_manual_linear_mps, s_manual_angular_rps);
+}
 
 static esp_err_t root_get_handler(httpd_req_t *req)
 {
@@ -210,22 +219,29 @@ static esp_err_t cmd_get_handler(httpd_req_t *req)
             ESP_LOGI(TAG, "web cmd: %s", move);
 
             if (strcmp(move, "forward") == 0) {
-                diff_drive_forward(50);
+                s_manual_linear_mps = WEB_MANUAL_LINEAR_MPS;
+                web_server_apply_manual_cmd();
             }
             else if (strcmp(move, "backward") == 0) {
-                diff_drive_backward(50);
+                s_manual_linear_mps = -WEB_MANUAL_LINEAR_MPS;
+                web_server_apply_manual_cmd();
             }
             else if (strcmp(move, "stop") == 0) {
-                diff_drive_stop();
-            } 
+                s_manual_linear_mps = 0.0f;
+                s_manual_angular_rps = 0.0f;
+                command_mux_stop_web(true);
+            }
             else if (strcmp(move, "left") == 0) {
-                servo_controller_turn_left();
+                s_manual_angular_rps = WEB_MANUAL_ANGULAR_RPS;
+                web_server_apply_manual_cmd();
             }
             else if (strcmp(move, "right") == 0) {
-                servo_controller_turn_right();
+                s_manual_angular_rps = -WEB_MANUAL_ANGULAR_RPS;
+                web_server_apply_manual_cmd();
             }
             else if (strcmp(move, "center") == 0) {
-                servo_controller_center();
+                s_manual_angular_rps = 0.0f;
+                web_server_apply_manual_cmd();
             }
             else if (strcmp(move, "center_offset_inc") == 0) {
                 app_config_t *config = app_config_get();

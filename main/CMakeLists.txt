@@ -15,7 +15,8 @@ idf_component_register(
         "drivers/encoder_driver.c"
 
         "control/servo_controller.c"
-        "control/diff_drive_controller.c"
+        "control/ackermann_controller.c"
+        "control/command_mux.c"
         "control/motor_pid_controller.c"
         "control/odometry_estimator.c"
         "control/safety_manager.c"
@@ -45,5 +46,6 @@ idf_component_register(
 		    nvs_flash
 		    esp_driver_uart
             esp_driver_mcpwm
+            micro_ros_espidf_component
         esp_http_server
 )

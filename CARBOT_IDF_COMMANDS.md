@@ -1,5 +1,9 @@
 # Carbot ESP-IDF 常用命令
 
+> 本项目统一使用 `source ~/esp/esp-idf-v5.4.4/export.sh`
+>
+> 不要使用 `source ~/esp/esp-idf/export.sh`
+
 ## 环境准备
 
 ```bash

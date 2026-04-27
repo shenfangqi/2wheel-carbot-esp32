@@ -32,6 +32,7 @@ static void wifi_event_handler(void *arg,
         esp_wifi_connect();
         ESP_LOGI(TAG, "Wi-Fi start, connecting...");
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         if (s_retry_num < WIFI_MAX_RETRY) {
             esp_wifi_connect();
             s_retry_num++;
@@ -48,6 +49,18 @@ static void wifi_event_handler(void *arg,
 
         web_server_start();
     }
+}
+
+bool wifi_manager_is_connected(void)
+{
+    EventBits_t bits = 0;
+
+    if (s_wifi_event_group == NULL) {
+        return false;
+    }
+
+    bits = xEventGroupGetBits(s_wifi_event_group);
+    return (bits & WIFI_CONNECTED_BIT) != 0;
 }
 
 void wifi_manager_init(void)
