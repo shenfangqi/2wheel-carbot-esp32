@@ -22,6 +22,8 @@ static const char *TAG = "wifi_manager";
 
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
+static esp_netif_t *s_wifi_sta_netif = NULL;
+static char s_wifi_ip[16] = "";
 
 static void wifi_event_handler(void *arg,
                                esp_event_base_t event_base,
@@ -63,6 +65,22 @@ bool wifi_manager_is_connected(void)
     return (bits & WIFI_CONNECTED_BIT) != 0;
 }
 
+const char *wifi_manager_get_ip(void)
+{
+    esp_netif_ip_info_t ip_info = {0};
+
+    if (s_wifi_sta_netif == NULL) {
+        return "";
+    }
+
+    if (esp_netif_get_ip_info(s_wifi_sta_netif, &ip_info) != ESP_OK) {
+        return "";
+    }
+
+    snprintf(s_wifi_ip, sizeof(s_wifi_ip), IPSTR, IP2STR(&ip_info.ip));
+    return s_wifi_ip;
+}
+
 void wifi_manager_init(void)
 {
     app_config_t *cfg = app_config_get();
@@ -74,7 +92,7 @@ void wifi_manager_init(void)
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
+    s_wifi_sta_netif = esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t wifi_init_cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_cfg));

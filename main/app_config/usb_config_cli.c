@@ -1,6 +1,7 @@
 #include "app_config/usb_config_cli.h"
 #include "app_config/app_config.h"
 #include "app_config/config_store.h"
+#include "network/wifi_manager.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -30,6 +31,7 @@ static void handle_command(char *line)
     if (strcmp(line, "show") == 0) {
         printf("wifi_ssid=%s\n", cfg->wifi_ssid);
         printf("wifi_password=%s\n", cfg->wifi_password);
+        printf("local_ip=%s\n", wifi_manager_get_ip());
         printf("agent_ip=%s\n", cfg->agent_ip);
         printf("agent_port=%d\n", cfg->agent_port);
     }

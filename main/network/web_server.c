@@ -12,7 +12,7 @@
 
 static const char *TAG = "web_server";
 static httpd_handle_t s_server = NULL;
-static const float WEB_MANUAL_LINEAR_MPS = 0.20f;
+static const float WEB_MANUAL_LINEAR_MPS = 0.40f;
 static const float WEB_MANUAL_ANGULAR_RPS = 2.0f;
 static float s_manual_linear_mps = 0.0f;
 static float s_manual_angular_rps = 0.0f;

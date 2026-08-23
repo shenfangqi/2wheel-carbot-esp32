@@ -19,9 +19,6 @@ esp_err_t uros_transport_init(rmw_init_options_t *rmw_options)
 
     snprintf(s_agent_port, sizeof(s_agent_port), "%d", cfg->agent_port);
 
-    printf("uros init\n");
-    printf("agent: %s:%s\n", cfg->agent_ip, s_agent_port);
-
     ret = rmw_uros_options_set_udp_address(cfg->agent_ip, s_agent_port, rmw_options);
     if (ret != RMW_RET_OK) {
         return ESP_FAIL;
