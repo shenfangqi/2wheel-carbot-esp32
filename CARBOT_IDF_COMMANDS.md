@@ -25,6 +25,35 @@ idf.py build
 idf.py -p /dev/cu.usbserial-0001 -b 115200 flash monitor
 ```
 
+## micro-ROS 启动顺序
+
+当前项目的 micro-ROS 第一阶段联调，要求 **host 先启动，再启动 device**。
+
+- `host`
+  - 含义：Jetson 上的 `ROS 2 Humble + micro-ROS Agent`
+- `device`
+  - 含义：ESP32 小车控制板
+
+当前已知限制：
+
+- 如果 `host` 先启动，再启动 `device`，`/cmd_vel` 可以正常工作
+- 如果 `device` 先启动，`host` 后启动，当前版本里从 `host` 发送 `/cmd_vel` 可能没有效果
+
+当前推荐联调顺序：
+
+1. 在 Jetson 上先启动 `ROS 2 Humble`
+2. 在 Jetson 上启动 `micro-ROS Agent`
+3. 再给 ESP32 上电
+4. 等 ESP32 连上 Wi-Fi 和 Agent 后，再从 host 发送 `/cmd_vel`
+
+Jetson 端 `micro-ROS Agent` 启动命令占位：
+
+```bash
+# TODO: 在 Jetson 上确认最终命令后回填
+# 示例占位：
+# ros2 run micro_ros_agent micro_ros_agent udp4 --port <PORT>
+```
+
 ## 仅打开监控
 
 ```bash
