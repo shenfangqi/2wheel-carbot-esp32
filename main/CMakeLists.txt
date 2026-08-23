@@ -13,6 +13,9 @@ idf_component_register(
         "drivers/servo_driver.c"
         "drivers/motor_driver.c"
         "drivers/encoder_driver.c"
+        "drivers/status_led.c"
+        "drivers/buzzer.c"
+        "drivers/battery_monitor.c"
 
         "control/servo_controller.c"
         "control/ackermann_controller.c"
@@ -38,6 +41,7 @@ idf_component_register(
 
 		REQUIRES
             driver
+            esp_adc
             icm42670p
             esp_timer
 		    esp_wifi

@@ -18,6 +18,8 @@ void command_mux_stop_web(bool center_steering);
 void command_mux_apply_ros_cmd(float linear_mps, float angular_rps);
 void command_mux_stop_ros(bool center_steering);
 command_source_t command_mux_get_active_source(void);
+void command_mux_set_motion_blocked(bool blocked);
+bool command_mux_is_motion_blocked(void);
 
 #ifdef __cplusplus
 }

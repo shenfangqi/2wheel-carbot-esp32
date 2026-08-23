@@ -11,13 +11,60 @@
 #include "control/command_mux.h"
 #include "control/motor_pid_controller.h"
 #include "control/servo_controller.h"
+#include "drivers/battery_monitor.h"
+#include "drivers/buzzer.h"
+#include "drivers/status_led.h"
 #include "ros_interface/ros_executor.h"
 #include "icm42670p.h"
 #include "utils/telemetry_buffer.h"
 
 static const char *TAG = "app_main";
 static const int PID_LOG_PERIOD_MS = 100;
+static const int LOW_VOLTAGE_BLINK_PERIOD_MS = 200;
+static const int STARTUP_OK_BEEP_MS = 120;
 static bool s_imu_ready_for_telemetry = false;
+
+static void app_enter_low_voltage_alarm(float voltage, const char *phase, bool stop_motion)
+{
+    ESP_LOGE(
+        TAG,
+        "%s battery voltage too low: %.2fV < %.2fV",
+        phase,
+        voltage,
+        BATTERY_LOW_VOLTAGE_ENTER_V);
+    printf("%s battery low, entering led/buzzer alarm mode\n", phase);
+
+    if (stop_motion) {
+        command_mux_set_motion_blocked(true);
+    }
+
+    buzzer_on();
+
+    while (1) {
+        status_led_toggle();
+        vTaskDelay(pdMS_TO_TICKS(LOW_VOLTAGE_BLINK_PERIOD_MS));
+    }
+}
+
+static void app_handle_startup_low_voltage(void)
+{
+    if (!battery_monitor_wait_ready(1000)) {
+        ESP_LOGW(TAG, "battery voltage not ready during startup check");
+        return;
+    }
+
+    const float startup_voltage = battery_monitor_get_voltage();
+    printf("battery voltage at startup: %.2fV\n", startup_voltage);
+
+    if (!battery_monitor_is_low()) {
+        buzzer_on();
+        vTaskDelay(pdMS_TO_TICKS(STARTUP_OK_BEEP_MS));
+        buzzer_off();
+        return;
+    }
+
+    app_enter_low_voltage_alarm(startup_voltage, "startup", false);
+}
 
 static void app_log_pid_status(const char *phase)
 {
@@ -73,6 +120,11 @@ void app_main(void)
 
     printf("=== CARBOT START ===\n");
 
+    status_led_init();
+    buzzer_init();
+    battery_monitor_init();
+    app_handle_startup_low_voltage();
+
     app_config_init();
     config = app_config_get();
     printf("config init ok\n");
@@ -104,6 +156,9 @@ void app_main(void)
     printf("imu init start\n");
 
     while (1) {
+        if (battery_monitor_is_low()) {
+            app_enter_low_voltage_alarm(battery_monitor_get_voltage(), "runtime", true);
+        }
         app_log_pid_status("idle");
         vTaskDelay(pdMS_TO_TICKS(PID_LOG_PERIOD_MS));
     }
