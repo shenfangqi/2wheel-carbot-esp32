@@ -1,0 +1,4 @@
+interface:
+  display_name: "Carbot Development"
+  short_description: "Build, debug, and extend the Carbot ESP32-S3 firmware"
+  default_prompt: "Use $carbot-development to understand, build, debug, or extend this Carbot firmware project."

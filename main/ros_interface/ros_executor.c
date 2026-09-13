@@ -11,6 +11,7 @@
 #include <rcl/error_handling.h>
 #include <rclc/executor.h>
 #include <rclc/rclc.h>
+#include <rmw_microros/rmw_microros.h>
 
 #include "control/command_mux.h"
 #include "network/uros_transport.h"
@@ -18,9 +19,11 @@
 #include "ros_interface/ros_publishers.h"
 #include "ros_interface/ros_subscribers.h"
 #include "ros_interface/ros_topics.h"
+#include "ros_interface/ros_time.h"
 
 static const char *TAG = "ros_executor";
 static TaskHandle_t s_ros_task_handle = NULL;
+static uint32_t s_reconnect_count = 0;
 
 static void ros_executor_log_rcl_ret(const char *op, rcl_ret_t rc)
 {
@@ -59,6 +62,13 @@ static esp_err_t ros_executor_connect_support(rclc_support_t *support, rcl_alloc
 
     if (uros_transport_init(rcl_init_options_get_rmw_init_options(&init_options)) != ESP_OK) {
         ESP_LOGE(TAG, "configure UDP transport failed");
+        ros_executor_log_rcl_ret("rcl_init_options_fini", rcl_init_options_fini(&init_options));
+        return ESP_FAIL;
+    }
+
+    if (rmw_uros_ping_agent_options(
+            250, 3, rcl_init_options_get_rmw_init_options(&init_options)) != RMW_RET_OK) {
+        ESP_LOGW(TAG, "micro-ROS agent ping failed");
         ros_executor_log_rcl_ret("rcl_init_options_fini", rcl_init_options_fini(&init_options));
         return ESP_FAIL;
     }
@@ -116,13 +126,18 @@ static void ros_executor_task(void *arg)
         }
         node_ready = true;
 
-        if (rclc_executor_init(&executor, &support.context, 1, &allocator) != RCL_RET_OK) {
+        ros_time_reset();
+        if (!ros_time_sync()) {
+            ESP_LOGW(TAG, "micro-ROS epoch synchronization failed");
+        }
+
+        if (rclc_executor_init(&executor, &support.context, 2, &allocator) != RCL_RET_OK) {
             ESP_LOGE(TAG, "executor init failed");
             goto cleanup;
         }
         executor_ready = true;
 
-        if (ros_publishers_init(&node, &executor) != ESP_OK) {
+        if (ros_publishers_init(&node, &support, &executor) != ESP_OK) {
             ESP_LOGE(TAG, "publisher init failed");
             goto cleanup;
         }
@@ -131,21 +146,31 @@ static void ros_executor_task(void *arg)
             ESP_LOGE(TAG, "subscriber init failed");
             goto cleanup;
         }
+        s_reconnect_count++;
 
+        uint32_t health_check_counter = 0;
         while (wifi_manager_is_connected()) {
             rcl_ret_t rc = rclc_executor_spin_some(&executor, RCL_MS_TO_NS(CONFIG_CARBOT_MICRO_ROS_SPIN_PERIOD_MS));
             ros_subscribers_check_timeout(CONFIG_CARBOT_MICRO_ROS_CMD_VEL_TIMEOUT_MS);
-            if (rc != RCL_RET_OK) {
+            if (rc != RCL_RET_OK || !ros_publishers_is_healthy()) {
                 ESP_LOGE(TAG, "executor spin failed: %d", (int)rc);
                 break;
+            }
+            health_check_counter++;
+            if (health_check_counter >= 20) {
+                health_check_counter = 0;
+                if (rmw_uros_ping_agent(100, 1) != RMW_RET_OK) {
+                    ESP_LOGE(TAG, "agent health check failed");
+                    break;
+                }
             }
             vTaskDelay(pdMS_TO_TICKS(1));
         }
 
 cleanup:
         ros_executor_stop_ros_motion();
-        ros_publishers_fini(&node, &executor);
         ros_subscribers_fini(&node, &executor);
+        ros_publishers_fini(&node, &executor);
 
         if (executor_ready) {
             ros_executor_log_rcl_ret("rclc_executor_fini", rclc_executor_fini(&executor));
@@ -156,9 +181,15 @@ cleanup:
         if (support_ready) {
             ros_executor_log_rcl_ret("rclc_support_fini", rclc_support_fini(&support));
         }
+        ros_time_reset();
 
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
+}
+
+uint32_t ros_executor_get_reconnect_count(void)
+{
+    return s_reconnect_count > 0 ? s_reconnect_count - 1 : 0;
 }
 
 void ros_executor_start(void)

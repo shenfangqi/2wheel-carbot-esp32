@@ -43,7 +43,13 @@ $(EXTENSIONS_DIR)/micro_ros_dev/install:
 	git clone -b humble https://github.com/ament/googletest src/googletest; \
 	git clone -b humble https://github.com/ros2/ament_cmake_ros src/ament_cmake_ros; \
 	git clone -b humble https://github.com/ament/ament_index src/ament_index; \
-	colcon build --cmake-args -DBUILD_TESTING=OFF -DCMAKE_C_COMPILER=cc -DCMAKE_CXX_COMPILER=c++;
+	if [ "$$(uname -s)" = "Darwin" ]; then \
+		HOST_SDKROOT="$$(xcrun --show-sdk-path)"; \
+		SDKROOT="$$HOST_SDKROOT" CPLUS_INCLUDE_PATH="$$HOST_SDKROOT/usr/include/c++/v1" \
+			colcon build --cmake-args -DBUILD_TESTING=OFF -DCMAKE_C_COMPILER=cc -DCMAKE_CXX_COMPILER=c++; \
+	else \
+		colcon build --cmake-args -DBUILD_TESTING=OFF -DCMAKE_C_COMPILER=cc -DCMAKE_CXX_COMPILER=c++; \
+	fi;
 
 $(EXTENSIONS_DIR)/micro_ros_src/src:
 	rm -rf micro_ros_src; \
@@ -86,6 +92,7 @@ $(EXTENSIONS_DIR)/micro_ros_src/src:
 $(EXTENSIONS_DIR)/micro_ros_src/install: $(EXTENSIONS_DIR)/esp32_toolchain.cmake $(EXTENSIONS_DIR)/micro_ros_dev/install $(EXTENSIONS_DIR)/micro_ros_src/src
 	cd $(UROS_DIR); \
 	unset AMENT_PREFIX_PATH; \
+	unset CPLUS_INCLUDE_PATH SDKROOT; \
 	PATH="$(subst /opt/ros/$(ROS_DISTRO)/bin,,$(PATH))"; \
 	. ../micro_ros_dev/install/local_setup.sh; \
 	colcon build \

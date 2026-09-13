@@ -18,7 +18,7 @@ idf_component_register(
         "drivers/battery_monitor.c"
 
         "control/servo_controller.c"
-        "control/ackermann_controller.c"
+        "control/differential_controller.c"
         "control/command_mux.c"
         "control/motor_pid_controller.c"
         "control/odometry_estimator.c"
@@ -27,6 +27,7 @@ idf_component_register(
         "ros_interface/ros_publishers.c"
         "ros_interface/ros_subscribers.c"
         "ros_interface/ros_executor.c"
+        "ros_interface/ros_time.c"
 
         "utils/telemetry_buffer.c"
 

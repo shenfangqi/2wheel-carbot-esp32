@@ -12,6 +12,7 @@
 #include <rclc/subscription.h>
 
 #include "control/command_mux.h"
+#include "control/safety_manager.h"
 #include "ros_interface/ros_topics.h"
 
 static const char *TAG = "ros_subscribers";
@@ -41,6 +42,11 @@ static void ros_subscribers_cmd_vel_callback(const void *msgin)
         return;
     }
 
+    if (!safety_manager_validate((float)msg->linear.x, (float)msg->angular.z)) {
+        command_mux_apply_ros_cmd((float)msg->linear.x, (float)msg->angular.z);
+        ESP_LOGE(TAG, "rejected invalid cmd_vel");
+        return;
+    }
     s_last_cmd_vel_ms = ros_subscribers_now_ms();
     ESP_LOGI(TAG, "cmd_vel linear=%.3f angular=%.3f", (float)msg->linear.x, (float)msg->angular.z);
     command_mux_apply_ros_cmd((float)msg->linear.x, (float)msg->angular.z);

@@ -13,6 +13,7 @@
 typedef struct {
     motor_id_t motor_id;
     encoder_id_t encoder_id;
+    int encoder_sign;
     float target_rpm;
     float actual_rpm;
     float integral;
@@ -25,14 +26,16 @@ static const char *TAG = "motor_pid";
 
 static const TickType_t PID_PERIOD_TICKS = pdMS_TO_TICKS(10);
 static const float PID_PERIOD_SEC = 0.01f;
-static const float ENCODER_PULSES_PER_REV = 1040.0f;
-static const float RPM_PER_PULSE = 60.0f / (ENCODER_PULSES_PER_REV * PID_PERIOD_SEC);
+static const float RPM_PER_PULSE = 60.0f / (MOTOR_ENCODER_COUNTS_PER_REV * PID_PERIOD_SEC);
 static const int MOTOR_PID_MAX_PWM = PWM_MOTOR_INPUT_MAX_VALUE;
 static const float MOTOR_PID_MAX_INTEGRAL = 1000.0f;
 
 static TaskHandle_t s_pid_task_handle = NULL;
 static bool s_pid_initialized = false;
 static bool s_pid_enabled = false;
+static bool s_open_loop_enabled = false;
+static int s_m1_open_loop_pwm = 0;
+static int s_m3_open_loop_pwm = 0;
 static portMUX_TYPE s_pid_lock = portMUX_INITIALIZER_UNLOCKED;
 
 static float s_kp = 1.0f;
@@ -42,11 +45,13 @@ static float s_kd = 0.2f;
 static motor_pid_channel_t s_m1 = {
     .motor_id = MOTOR_ID_M1,
     .encoder_id = ENCODER_ID_M1,
+    .encoder_sign = -1,
 };
 
 static motor_pid_channel_t s_m3 = {
     .motor_id = MOTOR_ID_M3,
     .encoder_id = ENCODER_ID_M3,
+    .encoder_sign = -1,
 };
 
 static float motor_pid_clamp_float(float value, float min_value, float max_value)
@@ -76,17 +81,6 @@ static int motor_pid_limit_output_direction(float target_rpm, int pwm_output)
     return pwm_output;
 }
 
-static void motor_pid_reset_channel(motor_pid_channel_t *channel, bool brake)
-{
-    channel->target_rpm = 0.0f;
-    channel->actual_rpm = 0.0f;
-    channel->integral = 0.0f;
-    channel->prev_error = 0.0f;
-    channel->pwm_output = 0;
-    channel->last_encoder_count = encoder_driver_get_count(channel->encoder_id);
-    motor_driver_stop(channel->motor_id, brake);
-}
-
 static void motor_pid_update_channel(motor_pid_channel_t *channel, float kp, float ki, float kd, bool enabled)
 {
     int current_count = encoder_driver_get_count(channel->encoder_id);
@@ -96,7 +90,7 @@ static void motor_pid_update_channel(motor_pid_channel_t *channel, float kp, flo
     float output = 0.0f;
 
     channel->last_encoder_count = current_count;
-    channel->actual_rpm = (float)delta_count * RPM_PER_PULSE;
+    channel->actual_rpm = (float)(delta_count * channel->encoder_sign) * RPM_PER_PULSE;
 
     if (!enabled || channel->target_rpm == 0.0f) {
         channel->integral = 0.0f;
@@ -128,6 +122,26 @@ static void motor_pid_update_channel(motor_pid_channel_t *channel, float kp, flo
     }
 }
 
+static void motor_pid_update_open_loop_channel(motor_pid_channel_t *channel, int pwm_output)
+{
+    int current_count = encoder_driver_get_count(channel->encoder_id);
+    int delta_count = current_count - channel->last_encoder_count;
+
+    channel->last_encoder_count = current_count;
+    channel->target_rpm = 0.0f;
+    channel->actual_rpm = (float)(delta_count * channel->encoder_sign) * RPM_PER_PULSE;
+    channel->integral = 0.0f;
+    channel->prev_error = 0.0f;
+    channel->pwm_output = motor_pid_clamp_int(
+        pwm_output, -MOTOR_PID_MAX_PWM, MOTOR_PID_MAX_PWM);
+
+    if (channel->pwm_output == 0) {
+        motor_driver_stop(channel->motor_id, true);
+    } else {
+        motor_driver_set_speed(channel->motor_id, channel->pwm_output);
+    }
+}
+
 static void motor_pid_task(void *arg)
 {
     (void)arg;
@@ -143,16 +157,27 @@ static void motor_pid_task(void *arg)
         float ki = 0.0f;
         float kd = 0.0f;
         bool enabled = false;
+        bool open_loop_enabled = false;
+        int m1_open_loop_pwm = 0;
+        int m3_open_loop_pwm = 0;
 
         portENTER_CRITICAL(&s_pid_lock);
         kp = s_kp;
         ki = s_ki;
         kd = s_kd;
         enabled = s_pid_enabled;
+        open_loop_enabled = s_open_loop_enabled;
+        m1_open_loop_pwm = s_m1_open_loop_pwm;
+        m3_open_loop_pwm = s_m3_open_loop_pwm;
         portEXIT_CRITICAL(&s_pid_lock);
 
-        motor_pid_update_channel(&s_m1, kp, ki, kd, enabled);
-        motor_pid_update_channel(&s_m3, kp, ki, kd, enabled);
+        if (open_loop_enabled) {
+            motor_pid_update_open_loop_channel(&s_m1, m1_open_loop_pwm);
+            motor_pid_update_open_loop_channel(&s_m3, m3_open_loop_pwm);
+        } else {
+            motor_pid_update_channel(&s_m1, kp, ki, kd, enabled);
+            motor_pid_update_channel(&s_m3, kp, ki, kd, enabled);
+        }
 
         vTaskDelayUntil(&last_wake_time, PID_PERIOD_TICKS);
     }
@@ -172,8 +197,10 @@ void motor_pid_controller_init(void)
     memset(&s_m3, 0, sizeof(s_m3));
     s_m1.motor_id = MOTOR_ID_M1;
     s_m1.encoder_id = ENCODER_ID_M1;
+    s_m1.encoder_sign = -1;
     s_m3.motor_id = MOTOR_ID_M3;
     s_m3.encoder_id = ENCODER_ID_M3;
+    s_m3.encoder_sign = -1;
     s_m1.last_encoder_count = encoder_driver_get_count(s_m1.encoder_id);
     s_m3.last_encoder_count = encoder_driver_get_count(s_m3.encoder_id);
 
@@ -193,22 +220,55 @@ void motor_pid_controller_set_pid(float kp, float ki, float kd)
 void motor_pid_controller_set_target_rpm(float m1_target_rpm, float m3_target_rpm)
 {
     portENTER_CRITICAL(&s_pid_lock);
+    s_open_loop_enabled = false;
     s_m1.target_rpm = m1_target_rpm;
     s_m3.target_rpm = m3_target_rpm;
     s_pid_enabled = (m1_target_rpm != 0.0f) || (m3_target_rpm != 0.0f);
     portEXIT_CRITICAL(&s_pid_lock);
 }
 
-void motor_pid_controller_stop(bool brake)
+void motor_pid_controller_set_open_loop(int m1_pwm, int m3_pwm)
 {
     portENTER_CRITICAL(&s_pid_lock);
     s_pid_enabled = false;
     s_m1.target_rpm = 0.0f;
     s_m3.target_rpm = 0.0f;
+    s_m1_open_loop_pwm = motor_pid_clamp_int(
+        m1_pwm, -MOTOR_PID_MAX_PWM, MOTOR_PID_MAX_PWM);
+    s_m3_open_loop_pwm = motor_pid_clamp_int(
+        m3_pwm, -MOTOR_PID_MAX_PWM, MOTOR_PID_MAX_PWM);
+    s_open_loop_enabled = (s_m1_open_loop_pwm != 0) || (s_m3_open_loop_pwm != 0);
+    portEXIT_CRITICAL(&s_pid_lock);
+}
+
+void motor_pid_controller_stop(bool brake)
+{
+    int m1_encoder_count = encoder_driver_get_count(ENCODER_ID_M1);
+    int m3_encoder_count = encoder_driver_get_count(ENCODER_ID_M3);
+
+    portENTER_CRITICAL(&s_pid_lock);
+    s_pid_enabled = false;
+    s_open_loop_enabled = false;
+    s_m1_open_loop_pwm = 0;
+    s_m3_open_loop_pwm = 0;
+    s_m1.target_rpm = 0.0f;
+    s_m3.target_rpm = 0.0f;
+    s_m1.actual_rpm = 0.0f;
+    s_m3.actual_rpm = 0.0f;
+    s_m1.integral = 0.0f;
+    s_m3.integral = 0.0f;
+    s_m1.prev_error = 0.0f;
+    s_m3.prev_error = 0.0f;
+    s_m1.pwm_output = 0;
+    s_m3.pwm_output = 0;
+    s_m1.last_encoder_count = m1_encoder_count;
+    s_m3.last_encoder_count = m3_encoder_count;
     portEXIT_CRITICAL(&s_pid_lock);
 
-    motor_pid_reset_channel(&s_m1, brake);
-    motor_pid_reset_channel(&s_m3, brake);
+    /* Stop both motors only after both channel states have been cleared as one
+     * transaction. A concurrent target update can no longer leave one channel
+     * reset and the other channel running. */
+    motor_driver_stop(MOTOR_ID_ALL, brake);
 }
 
 static void motor_pid_copy_telemetry(const motor_pid_channel_t *channel, motor_pid_telemetry_t *out)

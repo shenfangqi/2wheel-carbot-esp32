@@ -1,0 +1,282 @@
+CARBOT 真机信息快照（用于 Isaac Sim 适配）
+============================================================
+
+采集时间：2026-09-06（Asia/Tokyo）
+项目目录：/Users/shenfangqi/Code/2wheel-carbot
+固件仓库 HEAD：b34e4b56a8dad962918ff2f7a2524eb357867147
+工作树状态：有未提交修改；本文件以采集时工作树源码、sdkconfig 和真机串口回读为准，不等同于上述 HEAD。
+数据分级：
+  [LIVE]    本次从已连接真机读取
+  [SOURCE]  当前工作树源码/sdkconfig
+  [CAL]     仓库记录的地面标定结果
+  [UNKNOWN] 现有资料无法确认，必须测量或查机械 CAD/BOM
+
+重要说明
+------------------------------------------------------------
+1. 当前车是双履带差速/滑移转向底盘，不是 Ackermann 小车。
+2. M1 驱动右履带，M3 驱动左履带。M2/M4 外设会初始化，但不在当前差速 PID 驱动路径中。
+3. 遗留 S1 舵机不参与当前运动学、里程计或转向；Isaac Sim 不应把它当 steering joint。
+4. 本次只做静态安全读取；首先发送 motor_stop 并确认制动。未运行任何电机/履带测试。
+5. Wi-Fi SSID 和密码未写入本文件。
+
+
+一、Isaac Sim 建模最关键参数
+------------------------------------------------------------
+[CAL] 底盘类型                    tracked differential / skid steer
+[CAL] 有效差速轮距 b_eff          0.254 m
+      用途：控制器、理想差速运动学、里程计、转向匹配。
+[CAL] 实际履带中心几何间距 b_geom 0.225 m
+      用途：visual/collision/joint 的横向位置；不要替代 b_eff。
+[CAL] 等效主动链轮半径 r_eff      0.02175 m
+      用途：线速度、履带/轮转速、encoder 行程换算。
+[SOURCE] 编码器计数/转            1560 counts/rev
+[SOURCE] 最大车体线速度           0.50 m/s（输入安全上限）
+[SOURCE] 最大车体角速度           3.50 rad/s（输入安全上限）
+[SOURCE] 最大线加速度             0.50 m/s^2
+[SOURCE] 最大角加速度             2.50 rad/s^2
+[SOURCE] 最大单侧目标转速         250 rpm
+[SOURCE] 直行右履带目标修正       1.0005（仅直行且 v != 0）
+[SOURCE] 控制循环                 PID 10 ms；差速/限加速度任务 20 ms
+
+推荐 Isaac Sim 初始配置：
+  drive type                 differential/skid-steer
+  wheel/track separation     0.254 m（控制参数）
+  visual track separation    0.225 m（几何参数）
+  wheel/sprocket radius      0.02175 m
+  max linear speed           0.50 m/s
+  max angular speed          3.50 rad/s
+  max linear acceleration    0.50 m/s^2
+  max angular acceleration   2.50 rad/s^2
+  encoder resolution         1560 counts/rev
+  command convention         +X 前进，+Z/positive yaw 左转
+
+运动学：
+  v_left  = v - omega * 0.254 / 2
+  v_right = v + omega * 0.254 / 2
+  rpm = linear_mps * 60 / (2*pi*0.02175)
+  每计数等效履带行程 = 2*pi*0.02175/1560 = 0.00008761 m（约 0.08761 mm）
+  理论 250 rpm 对应等效线速度约 0.5694 m/s，但车体输入被 0.50 m/s 安全上限限制。
+
+真车电机安装符号：
+  车辆前进目标：M1（右）为正，M3（左）为负。
+  发布的 /wheel_ticks 已转换为车辆坐标：前进时 left_ticks、right_ticks 都应增加。
+  Isaac 内部关节轴方向可按模型定义，但 ROS/底盘接口必须保持上述车辆语义。
+
+
+二、本次真机实时状态
+------------------------------------------------------------
+[LIVE] 串口设备                  /dev/cu.usbserial-0001
+[LIVE] USB-UART                  Silicon Labs CP2102
+[LIVE] USB VID:PID               10c4:ea60
+[LIVE] USB 序列号                0001
+[LIVE] UART                      115200, 8N1, no flow control
+[LIVE] 已执行停止                motor_stop -> motors braked
+[LIVE] 电池电压                  11.08 V
+[LIVE] 低电压标志                0（未触发）
+[LIVE] M1 状态                   target 0.00 rpm, actual 0.00 rpm, PWM 0
+[LIVE] M3 状态                   target 0.00 rpm, actual 0.00 rpm, PWM 0
+[LIVE] 原始 PCNT 快照             M1=-441, M3=461
+      注意：这是开机后的硬件累计计数快照，不是零位，也不是 /wheel_ticks 的车辆语义累计值。
+[LIVE] IMU 初始化/静止标定        imu_calibrated=1
+[LIVE] 自动航向保持              heading_active=0
+[LIVE] gyro Z bias               -0.322550（CLI 字段名单位为 rad/s）
+[LIVE] relative yaw              0.000 deg
+[LIVE] heading correction        0.0000 rad/s
+[LIVE] 小车本机 IPv4             192.168.1.116
+[LIVE] micro-ROS Agent           192.168.1.109:8888/UDP
+[LIVE] Agent 状态                健康检查失败（采集时日志：agent health check failed）
+[LIVE] Wi-Fi                     已连接并取得 IP；SSID/密码已脱敏且未保存
+
+实时值只代表采集瞬间。电池、IP、计数、Agent 状态和 IMU bias 会变化。
+
+
+三、主控与固件平台
+------------------------------------------------------------
+[SOURCE] MCU/target                ESP32-S3, Xtensa
+[SOURCE] ESP-IDF                  5.4.4（项目说明/开发环境）
+[SOURCE] CPU frequency            160 MHz
+[SOURCE] Flash                    4 MB, DIO, 80 MHz
+[SOURCE] Partition                single app large
+[SOURCE] FreeRTOS tick            100 Hz
+[SOURCE] 全局日志级别              ESP_LOG_ERROR
+[SOURCE] 配置持久化                NVS namespace "carbot"
+[SOURCE] 网络                      2.4 GHz Wi-Fi + HTTP + micro-ROS UDP
+
+
+四、驱动、电机、PWM 与编码器
+------------------------------------------------------------
+[SOURCE] 电机 PWM：
+  resolution                     10 MHz
+  frequency                      25 kHz
+  period                         400 ticks
+  dead-zone offset               240 ticks
+  software input range           -160..160
+  非零输出对应硬件 duty magnitude 241..400 ticks（约 60.25%..100%）
+  stop default                   active brake
+
+[SOURCE] GPIO：
+  M1 PWM A/B                     GPIO 4 / 5   （右履带，active drive）
+  M2 PWM A/B                     GPIO 15 / 16 （当前差速路径未用）
+  M3 PWM A/B                     GPIO 9 / 10  （左履带，active drive）
+  M4 PWM A/B                     GPIO 13 / 14 （当前差速路径未用）
+  H1 encoder A/B                 GPIO 6 / 7
+  H2 encoder A/B                 GPIO 47 / 48
+  H3 encoder A/B                 GPIO 11 / 12
+  H4 encoder A/B                 GPIO 1 / 2
+
+[SOURCE] 编码器 PCNT：
+  quadrature accumulated count
+  hardware limits                -1000 / +1000（驱动层处理累计）
+  glitch filter                  1000 ns
+  feedback active                H1/M1 与 H3/M3
+  M3 驱动内部有 A/B 调换和符号修正；不要仅凭 GPIO 顺序重建关节正方向。
+
+[SOURCE] PID：
+  Kp / Ki / Kd                   0.8 / 0.15 / 0.0
+  sample period                  0.01 s
+  integral clamp                +/-1000
+  opposite-sign output guard     输出不允许与目标反向；否则置零
+  gains                          左右共用，当前无运行时调参
+
+
+五、IMU
+------------------------------------------------------------
+[SOURCE] 型号                     TDK/InvenSense ICM-42670-P
+[SOURCE] bus/address              I2C0, 0x68
+[SOURCE] I2C GPIO                 SCL 39, SDA 40
+[SOURCE] I2C speed                400 kHz
+[SOURCE] accelerometer range      +/-4 g
+[SOURCE] gyroscope range          +/-2000 deg/s
+[SOURCE] accel/gyro ODR           400 Hz
+[SOURCE] operating mode           low-noise
+[SOURCE] ROS frame_id             imu_link
+[SOURCE] ROS orientation          不提供；orientation_covariance[0] = -1
+[UNKNOWN] imu_link 相对 base_link 的 xyz/rpy 安装位姿
+[UNKNOWN] IMU 噪声密度、随机游走和协方差实测值
+
+集成提醒：当前底层 ICM 驱动函数实际已输出 m/s^2 和 rad/s，但 ROS publisher 又调用了
+g->m/s^2、deg/s->rad/s 转换函数。接入 Isaac/ROS 前应做静止重力与已知角速度对照，确认
+/imu/data_raw 是否存在二次单位换算；未经验证不要用当前消息幅值标定 Isaac IMU 噪声。
+
+
+六、电池与安全
+------------------------------------------------------------
+[SOURCE] battery ADC              GPIO 3, ADC1 channel 2, 12 dB attenuation
+[SOURCE] 当前电压倍率              ADC pin voltage * 4.05
+[SOURCE] 低电压进入阈值            6.60 V
+[SOURCE] 低电压释放阈值            6.90 V
+[SOURCE] sample period            100 ms
+[SOURCE] ADC calibration          优先 curve fitting；失败时 3.3 V / 12-bit 近似
+[SOURCE] 低电压动作                阻断运动、制动、蜂鸣器、状态灯闪烁，并进入锁存循环
+[SOURCE] status LED               GPIO 45, active high
+[SOURCE] buzzer                   GPIO 46, active high
+
+注意：仓库旧参考文档曾写电压倍率 8.16；当前源码是 4.05。本文件采用当前源码 4.05，
+但 11.08 V 真机回读应与万用表复核后才可作为电池模型标定依据。
+
+
+七、遗留舵机（不参与履带运动学）
+------------------------------------------------------------
+[SOURCE] S1 GPIO                  8
+[SOURCE] PWM                     50 Hz, 1 MHz timebase, 20 ms period
+[SOURCE] pulse range             500..2500 us
+[SOURCE] angle range             -90..+90 deg
+[SOURCE] default                 0 deg，加 NVS center offset（限制范围由 servo controller 管理）
+Isaac 建议：若只做底盘导航可省略；若要还原外观，可作为独立非转向关节。
+
+
+八、ROS 2 / micro-ROS 接口
+------------------------------------------------------------
+[SOURCE] ROS domain               0
+[SOURCE] node                     /carbot_base
+[SOURCE] namespace                空
+[SOURCE] transport                UDP4
+[LIVE] Agent endpoint             192.168.1.109:8888
+[SOURCE] executor spin            50 ms
+[SOURCE] cmd_vel watchdog         500 ms
+[SOURCE] fast publish period      20 ms = 50 Hz
+[SOURCE] slow publish divider     25 -> 2 Hz
+
+Subscriber：
+  /cmd_vel                       geometry_msgs/msg/Twist
+  使用 linear.x [m/s]、angular.z [rad/s]；其余分量不用于底盘控制。
+
+Publishers：
+  /wheel_ticks                   carbot_msgs/msg/WheelTicks, 50 Hz, frame base_link
+    Header header
+    uint64 sequence
+    uint32 boot_id
+    uint64 device_stamp_us
+    int64 left_ticks
+    int64 right_ticks
+  /imu/data_raw                  sensor_msgs/msg/Imu, 50 Hz, frame imu_link
+  /battery_state                 sensor_msgs/msg/BatteryState, 2 Hz
+  /carbot/status                 carbot_msgs/msg/CarbotStatus, 2 Hz
+    Header header; uint64 sequence; uint32 boot_id; uint64 device_stamp_us;
+    bool agent_connected; bool time_synchronized; bool motion_blocked;
+    bool battery_low; bool imu_ready; uint8 active_command_source;
+    uint32 invalid_cmd_count; uint32 reconnect_count; int64 clock_offset_ns
+
+QoS：publisher/subscriber 使用 best effort。
+TF/odom：当前固件不发布 TF，也不直接发布 nav_msgs/Odometry；上位机需以 /wheel_ticks
+作为权威轮式里程计输入并自行积分/融合 IMU。避免同时从履带可视关节再积分第二套 odom。
+
+
+九、网页与控制仲裁
+------------------------------------------------------------
+[SOURCE] HTTP                     port 80
+[LIVE] base URL                  http://192.168.1.116/
+[SOURCE] manual command           forward/backward = +/-0.40 m/s；left/right = +/-2.0 rad/s
+[SOURCE] endpoints                /, /cmd, /servo/offset, /telemetry, /telemetry/reset
+[SOURCE] command sources          Web 与 ROS 仲裁；ROS cmd_vel 过期只停止 ROS 所有权运动，
+                                  不应意外取消当前 Web 所有权。
+
+
+十、Isaac Sim 仍缺少的机械/物理参数（必须补测，不能猜）
+------------------------------------------------------------
+[UNKNOWN] 整车质量（含当前电池）
+[UNKNOWN] 质心相对 base_link 的 xyz
+[UNKNOWN] 惯性张量 Ixx/Iyy/Izz/Ixy/Ixz/Iyz
+[UNKNOWN] 整车外廓长、宽、高
+[UNKNOWN] base_link 定义及离地高度
+[UNKNOWN] 左右履带的宽度、接地长度、厚度
+[UNKNOWN] 主动轮/从动轮/支重轮数量、半径、轴向位置
+[UNKNOWN] 履带/地面静摩擦、动摩擦、侧向摩擦及不同地面参数
+[UNKNOWN] 电机型号、减速比、额定/堵转转矩、转子惯量、粘性阻尼
+[UNKNOWN] 传动间隙、履带张紧、左右侧阻力差
+[UNKNOWN] battery mass/pose/chemistry/capacity/internal resistance
+[UNKNOWN] imu_link、天线、传感器和碰撞体的精确安装位姿
+[UNKNOWN] visual/collision mesh 或机械 CAD
+
+没有这些参数时，可先用上面的标定运动学做“理想差速底盘”联调 ROS/Nav2；但不能声称
+动力学、打滑、转弯半径、惯性响应、电耗或传感器噪声已与真车一致。
+
+
+十一、建议的 Isaac Sim 验收顺序
+------------------------------------------------------------
+1. 坐标与符号：+linear.x 前进，+angular.z 左转；左右 ticks 前进均递增。
+2. 直线：1.0 m 指令与仿真位移、真车地面标定对照。
+3. 原地转向：用 b_eff=0.254 m 对照 90/360 度；几何仍使用 0.225 m。
+4. 速度/加速度：限制到 0.50 m/s、3.50 rad/s、0.50 m/s^2、2.50 rad/s^2。
+5. ROS watchdog：停止 cmd_vel 超过 500 ms 后应制动/零速。
+6. 传感器：先核对 IMU 单位问题，再配置噪声和融合；轮编码器量化为 1560 counts/rev。
+7. 补齐质量、质心、惯量和履带接触参数后，再做动力学与打滑标定。
+
+
+来源优先级与已知冲突
+------------------------------------------------------------
+优先级：本次真机串口回读 > 当前工作树源码/sdkconfig > 仓库 README/TODO/skill 参考。
+当前工作树相对 HEAD 有大量未提交修改，尤其控制、ROS、battery、motor、sdkconfig；若重新烧录
+不同固件，本快照需要重新采集。
+
+已知文档冲突：
+  - 当前源码 encoder counts/rev = 1560；旧参考写过 1040。
+  - 当前源码 battery scale = 4.05；旧参考写过 8.16。
+  - 当前源码 PWM dead zone = 240、输入范围 +/-160；旧参考写过 200、输入范围 +/-200。
+  - 当前源码 PID = 0.8/0.15/0.0；旧参考写过 0.8/0.05/0.0。
+本文件全部采用当前工作树源码，并明确记录真机即时回读。
+
+敏感信息处理
+------------------------------------------------------------
+未包含 Wi-Fi SSID、Wi-Fi 密码、任何密钥或 token。局域网 IP 被保留，因为它直接用于
+micro-ROS/Isaac 联调，但可能随 DHCP 变化。

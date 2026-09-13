@@ -46,13 +46,15 @@ idf.py -p /dev/cu.usbserial-0001 -b 115200 flash monitor
 3. 再给 ESP32 上电
 4. 等 ESP32 连上 Wi-Fi 和 Agent 后，再从 host 发送 `/cmd_vel`
 
-Jetson 端 `micro-ROS Agent` 启动命令占位：
+Jetson 端（已安装 ROS 2 Humble 与 micro-ROS Agent）启动命令：
 
 ```bash
-# TODO: 在 Jetson 上确认最终命令后回填
-# 示例占位：
-# ros2 run micro_ros_agent micro_ros_agent udp4 --port <PORT>
+source /opt/ros/humble/setup.bash
+export ROS_DOMAIN_ID=0
+ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888 -v6
 ```
+
+完整的 ROS 检查、`cmd_vel` 发布和安全测试步骤见 `README.md`。
 
 ## 仅打开监控
 

@@ -1,100 +1,101 @@
-# Carbot ESP32-S3 使用说明
+# Carbot ESP32-S3 固件
 
-本项目是一个基于 `ESP-IDF v5.4.4` 的 ESP32-S3 小车控制工程。
+Carbot 是基于 ESP-IDF 5.4.4 的 ESP32-S3 履带式差速小车固件，包含左右履带速度闭环、差速/滑移转向、Wi-Fi 网页控制、micro-ROS `/cmd_vel`、IMU 航向修正以及电池低压保护。舵机相关代码和接口属于旧底盘兼容项，不再参与当前底盘的运动学转向。
 
-如果你只是想尽快上手，建议按下面顺序操作：
+## 目录
 
-1. 打开一个新终端，进入项目目录并加载 ESP-IDF 环境
-2. 连接开发板，确认串口
-3. 烧录或直接打开串口监控
-4. 进入串口 CLI，配置手机热点和 `micro-ROS Agent`
-5. 重启开发板，确认 Wi-Fi 连通和启动日志正常
+- [安全须知](#安全须知)
+- [环境与编译](#环境与编译)
+- [烧录与串口监控](#烧录与串口监控)
+- [首次启动与设备配置](#首次启动与设备配置)
+- [网页控制与遥测](#网页控制与遥测)
+- [micro-ROS 启动与验证](#micro-ros-启动与验证)
+- [调试与故障定位](#调试与故障定位)
+- [开发说明](#开发说明)
 
-## 1. 环境准备
+## 安全须知
 
-每次新开一个终端，都先执行：
+- 首次烧录、修改电机、差速参数或 PID 后，把履带架空再测试。
+- 保证可以立即断开电机电源，不要把网页或 ROS 停车当成唯一急停手段。
+- 运动测试前确认履带、传动件和线束不会卡住。
+- 启动时持续蜂鸣且 LED 快速闪烁表示电池低压告警。先用万用表检查电池和采样电路，不要直接绕过保护。
+- 串口 `show` 会明文显示 Wi-Fi 密码，不要把输出粘贴到公开日志或提交中。
+
+## 环境与编译
+
+当前开发机约定：
+
+- 项目：`~/Code/carbot`
+- ESP-IDF：`~/esp/esp-idf-v5.4.4`
+- 芯片：ESP32-S3
+- 串口速率：115200
+
+每个新终端都先加载环境：
 
 ```bash
 cd ~/Code/carbot
 source ~/esp/esp-idf-v5.4.4/export.sh
+echo "$IDF_PATH"
 ```
 
-不要使用：
+正常增量编译：
 
 ```bash
-source ~/esp/esp-idf/export.sh
+idf.py build
 ```
 
-确认当前加载的是正确的 IDF：
-
-```bash
-echo $IDF_PATH
-```
-
-## 2. 连接开发板并确认串口
-
-用可传数据的 USB 线连接 ESP32-S3 开发板和 Mac。
-
-查看当前串口：
-
-```bash
-ls /dev/cu.*
-```
-
-常见串口名示例：
-
-- `/dev/cu.usbserial-0001`
-- `/dev/cu.usbmodem*`
-
-如果不确定哪个是开发板串口，可以在插拔开发板前后各执行一次：
-
-```bash
-ls /dev/cu.*
-```
-
-## 3. 编译、烧录、查看启动日志
-
-### 清理并编译
+只有在切换 IDF、配置或依赖异常时才清理重编：
 
 ```bash
 idf.py fullclean
 idf.py build
 ```
 
-### 烧录并打开串口监控
+成功时末尾会显示 `Project build complete`、固件大小和剩余分区空间。项目依赖由 ESP-IDF Component Manager 和仓库内组件提供；首次构建可能比增量构建慢。
 
-把下面命令里的串口替换成你机器上的实际串口：
+修改 micro-ROS Kconfig 参数时：
+
+```bash
+idf.py menuconfig
+```
+
+菜单位于 `Carbot micro-ROS settings`。当前默认值为：启用 micro-ROS、Domain ID 0、`cmd_vel` 超时 500 ms、executor 周期 50 ms。
+
+## 烧录与串口监控
+
+连接可传数据的 USB 线，插拔前后比较端口：
+
+```bash
+ls /dev/cu.*
+```
+
+将示例端口替换为实际端口：
 
 ```bash
 idf.py -p /dev/cu.usbserial-0001 -b 115200 flash monitor
 ```
 
-### 只打开串口监控
-
-如果固件已经烧录过，只想看启动日志：
+固件已烧录时仅打开监控：
 
 ```bash
 idf.py -p /dev/cu.usbserial-0001 -b 115200 monitor
 ```
 
-### 退出串口监控
+按 `Ctrl+]` 退出 `idf.py monitor`。若端口被占用，先关闭其他串口工具或 monitor。
 
-退出 `idf.py monitor`：
+## 首次启动与设备配置
 
-```text
-Ctrl+]
-```
-
-## 4. 启动后你会看到什么
-
-正常启动时，串口里通常会看到类似输出：
+健康电池启动时会短鸣一次，串口输出类似：
 
 ```text
 === CARBOT START ===
+battery voltage at startup: 7.40V
+config loaded
 config init ok
 cli start ok
 servo init ok
-ackermann controller init ok
+imu init start
+differential controller init ok
 command mux init ok
 motor pid init ok
 telemetry buffer init ok
@@ -106,154 +107,185 @@ uart cli ready
 carbot>
 ```
 
-说明：
+实际电压、NVS 和网络状态会不同。固件把全局 ESP 日志设为 `ERROR`，因此许多 `ESP_LOGI/W` 默认不可见；上述 `printf` 启动节点仍会显示。
 
-- `carbot>` 就是串口 CLI 提示符
-- 启动日志和 CLI 共用同一个串口
-- 如果没开热点或 Wi-Fi 配置不对，可能会看到 `wifi_manager: connect timeout` 或 `connect to the AP failed`
-
-## 5. 进入 CLI 并配置 Wi-Fi
-
-看到下面提示符后，就可以直接输入命令：
-
-```text
-carbot>
-```
-
-当前固件支持的常用命令：
-
-- `show`
-- `set wifi_ssid <SSID>`
-- `set wifi_password <PASSWORD>`
-- `set agent_ip <IP>`
-- `set agent_port <PORT>`
-- `save`
-- `reboot`
-
-建议第一次先配置手机热点。
-
-### 查看当前配置
+CLI 与启动日志共用 UART0：
 
 ```text
 show
+set wifi_ssid <SSID>
+set wifi_password <PASSWORD>
+set agent_ip <Agent主机IPv4>
+set agent_port <端口>
+save
+reboot
 ```
 
-### 配置手机热点
-
-示例：
+首次配置示例：
 
 ```text
 set wifi_ssid MyHotspot
 set wifi_password 12345678
+set agent_ip 192.168.1.100
+set agent_port 8888
 save
 reboot
 ```
 
 注意：
 
-- 手机热点建议使用 `2.4GHz`
-- `ESP32-S3` 不能连接仅 `5GHz` 的热点
-- 如果热点名或密码里带空格，当前 CLI 不适合直接配置，建议先改成不含空格的热点名/密码
+- `set` 只改内存；必须 `save` 后才写入 NVS。
+- Wi-Fi 和 Agent 参数在启动时使用，所以保存后要重启。
+- 当前解析器不支持含空格的 SSID 或密码。
+- 使用 2.4 GHz、WPA2 兼容网络；ESP32-S3 不能连接仅 5 GHz 热点。
+- `show` 中 `local_ip` 为空说明还没有获得 DHCP 地址。
 
-## 6. 配置 micro-ROS Agent
+## 网页控制与遥测
 
-本项目当前的 `micro-ROS` 使用的是 `Wi-Fi + UDP`，不是串口 transport。
-
-如果你还要让 ESP 连接 `micro-ROS Agent`，需要配置 Agent 所在主机的 IP 和端口。
-
-示例：
+设备获得 IP 后，在同一网络的浏览器打开：
 
 ```text
-set agent_ip 192.168.1.100
-set agent_port 8888
-save
-reboot
+http://<local_ip>/
 ```
 
-如果只想看板子启动和本地日志，不跑 ROS，`agent_ip` 先不配也可以。
+网页提供前进、后退、左右差速转向、停止、遗留舵机中心偏置和遥测入口。手动控制当前使用固定线速度 `0.40 m/s`、角速度 `2.0 rad/s`；左右转向由两侧履带速度差实现，舵机不是转向源。
 
-## 7. 推荐启动顺序
+HTTP 接口：
 
-当前项目联调时，推荐顺序是：
+| 地址 | 功能 |
+|---|---|
+| `/` | 控制页面 |
+| `/cmd?move=forward`、`backward`、`left`、`right`、`center`、`stop` | 控制命令 |
+| `/cmd?move=center_offset_inc`、`center_offset_dec` | 遗留舵机中心每次调整 1°并写入 NVS；不影响差速转向 |
+| `/servo/offset` | 遗留舵机中心偏置；不作为运动学输入 |
+| `/telemetry` | CSV 遥测 |
+| `/telemetry/reset` | 清空遥测缓存 |
 
-1. 先打开手机热点或其他 2.4GHz Wi-Fi
-2. 如果要跑 ROS，先在 Host 端启动 `ROS 2` 和 `micro-ROS Agent`
-3. 再给 ESP32 上电或重启
-4. 打开串口监控，观察启动日志
-
-## 8. 常见操作流程
-
-### 流程 A：只看启动日志
+无运动风险的检查：
 
 ```bash
-cd ~/Code/carbot
-source ~/esp/esp-idf-v5.4.4/export.sh
-idf.py -p /dev/cu.usbserial-0001 -b 115200 monitor
+curl "http://<local_ip>/servo/offset"
+curl "http://<local_ip>/telemetry" -o carbot-telemetry.csv
 ```
 
-### 流程 B：重新烧录最新固件
+不要用自动化脚本随意请求运动接口；命令收到后会立即驱动车辆。
+
+遥测 CSV 包含 M1/M3 目标 RPM、实际 RPM、PWM、陀螺仪 Z 轴和 IMU 状态。调试速度闭环时先看：
+
+- 有目标、实际始终为 0：检查编码器、机械卡滞和方向映射。
+- PWM 很大但实际速度很低：检查电池、负载、死区、接线或堵转。
+- 左右目标符号不同是当前底盘前进方向映射的正常设计。
+
+## micro-ROS 启动与验证
+
+当前约定：
+
+- Host：Jetson，ROS 2 Humble
+- Transport：Wi-Fi + UDP
+- Agent 默认端口：8888
+- ROS Domain ID：0
+- Node：`/carbot_base`
+- Subscriber：`/cmd_vel`，类型 `geometry_msgs/msg/Twist`
+- Publisher：`/wheel_ticks`，类型 `carbot_msgs/msg/WheelTicks`，50 Hz
+- Publisher：`/imu/data_raw`，类型 `sensor_msgs/msg/Imu`，50 Hz
+- Publisher：`/battery_state`，类型 `sensor_msgs/msg/BatteryState`，2 Hz
+- Publisher：`/carbot/status`，类型 `carbot_msgs/msg/CarbotStatus`，2 Hz
+- 命令看门狗：500 ms
+
+`carbot_msgs` 的接口源码位于 `extra_ros_packages/carbot_msgs`。Jetson 必须在自己的
+ROS 2 workspace 中复制或引用该包并执行 `colcon build`，否则无法解析
+`/wheel_ticks` 和 `/carbot/status`。轮计数消息同时包含 64 位左右累计计数、
+`sequence`、`boot_id` 和 ESP32 单调时钟 `device_stamp_us`。Jetson 发现 `boot_id`
+变化时必须重置增量基准。
+
+固件会拒绝非有限值以及超过 `0.5 m/s`、`3.5 rad/s` 的命令，并在 20 ms 控制循环
+中限制线加速度为 `0.5 m/s²`、角加速度为 `2.5 rad/s²`。这些限制独立于 Jetson
+上的 velocity smoother。
+
+仓库不负责安装 Jetson 的 ROS 2 与 micro-ROS Agent。已安装的 Host 上执行：
 
 ```bash
-cd ~/Code/carbot
-source ~/esp/esp-idf-v5.4.4/export.sh
-idf.py fullclean
-idf.py build
-idf.py -p /dev/cu.usbserial-0001 -b 115200 flash monitor
+source /opt/ros/humble/setup.bash
+export ROS_DOMAIN_ID=0
+ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888 -v6
 ```
 
-### 流程 C：首次配置热点和 Agent
+固件在创建 ROS 实体前探测 Agent，运行期间周期检查 Agent，并在连接重建后重新
+同步 micro-ROS epoch。连接后检查：
 
-1. 烧录并进入 `monitor`
-2. 等待出现 `carbot>`
-3. 输入：
+```bash
+ros2 node list
+ros2 topic list
+ros2 topic info /cmd_vel -v
+ros2 topic echo /wheel_ticks --once
+ros2 topic echo /imu/data_raw --once
+ros2 topic echo /battery_state --once
+ros2 topic echo /carbot/status --once
+```
+
+架空车轮后发送一次低速命令：
+
+```bash
+ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.10}, angular: {z: 0.0}}"
+```
+
+单次命令会在约 500 ms 后由固件自动停车并回中。连续测试要以高于 2 Hz 发布，建议 10 Hz；停止发布后再显式发送零命令：
+
+```bash
+ros2 topic pub -r 10 /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.10}, angular: {z: 0.0}}"
+
+ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.0}, angular: {z: 0.0}}"
+```
+
+固件已有连接重试和资源清理逻辑，但 Device 先启动、Agent 重启、Wi-Fi 恢复等场景仍应按 [TODO_MICRO_ROS_RECONNECT.md](TODO_MICRO_ROS_RECONNECT.md) 做实机验收，不能仅凭编译通过视为完成。
+
+## 调试与故障定位
+
+按层排查，不要一开始同时修改多个模块：
+
+1. **编译**：确认 `IDF_PATH` 是 5.4.4，从第一条编译错误开始处理。
+2. **烧录**：确认真实 `/dev/cu.*`、关闭其他串口工具、重新插拔 USB。
+3. **启动**：从 `=== CARBOT START ===` 开始保存完整日志，确定最后一个成功节点。
+4. **电池**：持续蜂鸣/闪灯时用万用表对照串口电压，检查 GPIO3 分压采样。
+5. **CLI**：确认 UART0、115200，按 Enter 查看提示符。
+6. **Wi-Fi**：用 `show` 检查配置和 `local_ip`，确认 2.4 GHz、密码、DHCP 和同网段。
+7. **网页**：先请求无运动风险的 `/servo/offset`，再在架空车轮条件下测控制。
+8. **Agent**：检查 UDP 8888、主机防火墙/路由、Agent 输出和 Domain ID。
+9. **ROS**：检查 node、topic、消息类型；记住单条消息 500 ms 后超时是预期行为。
+10. **运动控制**：导出 `/telemetry`，对照目标 RPM、实际 RPM、PWM、方向和 IMU。
+
+需要看到 `ESP_LOGI/W` 时，可暂时把 `app_main.c` 中全局日志等级从 `ESP_LOG_ERROR` 提高，定位后再决定是否保留。不要把增加日志与实际修复混为一谈。
+
+每次硬件相关改动至少验证相关场景：健康启动、停车、前进/倒退、转向、Web/ROS 切换、通信丢失、低压保护。明确记录哪些只编译通过，哪些完成架空测试或地面测试。
+
+## 开发说明
+
+主要模块：
+
+| 目录 | 职责 |
+|---|---|
+| `main/drivers` | GPIO、PWM、PCNT、ADC 等硬件访问 |
+| `main/control` | 差速/滑移转向、PID、IMU 航向修正、命令仲裁与安全；舵机代码仅作遗留兼容 |
+| `main/network` | Wi-Fi、HTTP、micro-ROS UDP 地址 |
+| `main/ros_interface` | ROS node、topic、callback、生命周期和超时 |
+| `main/app_config` | 默认配置、NVS 和串口 CLI |
+
+后续 Codex 开发应使用仓库 skill：
 
 ```text
-set wifi_ssid MyHotspot
-set wifi_password 12345678
-set agent_ip 192.168.1.100
-set agent_port 8888
-save
-reboot
+$carbot-development
 ```
 
-## 9. 常见问题
+详细项目上下文位于 [`.codex/skills/carbot-development/SKILL.md`](.codex/skills/carbot-development/SKILL.md)，其中包含架构、安全约束、硬件参数、调试流程和路线图。
 
-### `wifi_manager: connect timeout`
+其他资料：
 
-常见原因：
-
-- 手机热点没打开
-- 热点不是 `2.4GHz`
-- `SSID` 或密码配置错误
-- 设备里保存的是旧配置
-
-### `show` 命令不存在
-
-如果 `reboot` 能用，但 `show` 不存在，通常说明开发板里跑的不是当前仓库这版固件。先重新烧录：
-
-```bash
-idf.py -p /dev/cu.usbserial-0001 -b 115200 flash monitor
-```
-
-### 串口打不开
-
-先确认串口存在：
-
-```bash
-ls /dev/cu.*
-```
-
-再确认是否使用了正确端口。
-
-### 切换终端后 `idf.py` 不能用
-
-通常是忘了重新加载环境：
-
-```bash
-source ~/esp/esp-idf-v5.4.4/export.sh
-```
-
-## 10. 相关文档
-
-- [CARBOT_IDF_COMMANDS.md](CARBOT_IDF_COMMANDS.md)
-- [ROS_ACKERMANN_UNITS_EXAMPLE.md](ROS_ACKERMANN_UNITS_EXAMPLE.md)
+- [CARBOT_IDF_COMMANDS.md](CARBOT_IDF_COMMANDS.md)：命令速查
+- [ROS_DIFFERENTIAL_UNITS_EXAMPLE.md](ROS_DIFFERENTIAL_UNITS_EXAMPLE.md)：差速运动学、标定轮距和 PID 单位示例
+- [TODO_MICRO_ROS_RECONNECT.md](TODO_MICRO_ROS_RECONNECT.md)：重连验收
+- [TODO_MOTOR_TUNING.md](TODO_MOTOR_TUNING.md)：电机输入与死区改进
+- [TODO_PID.md](TODO_PID.md)：PID 后续工作（部分描述来自旧版本，实施前对照源码）
+- [TODO_STRAIGHT_LINE_AND_IMU.md](TODO_STRAIGHT_LINE_AND_IMU.md)：直线与 IMU 外环方案

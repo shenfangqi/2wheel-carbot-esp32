@@ -3,13 +3,15 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
+#include "esp_sleep.h"
 
 #include "app_config/app_config.h"
 #include "app_config/usb_config_cli.h"
 #include "network/wifi_manager.h"
-#include "control/ackermann_controller.h"
+#include "control/differential_controller.h"
 #include "control/command_mux.h"
 #include "control/motor_pid_controller.h"
+#include "control/odometry_estimator.h"
 #include "control/servo_controller.h"
 #include "drivers/battery_monitor.h"
 #include "drivers/buzzer.h"
@@ -21,6 +23,7 @@
 static const char *TAG = "app_main";
 static const int PID_LOG_PERIOD_MS = 100;
 static const int LOW_VOLTAGE_BLINK_PERIOD_MS = 200;
+static const int LOW_VOLTAGE_ALARM_DURATION_MS = 30000;
 static const int STARTUP_OK_BEEP_MS = 120;
 static bool s_imu_ready_for_telemetry = false;
 
@@ -32,18 +35,36 @@ static void app_enter_low_voltage_alarm(float voltage, const char *phase, bool s
         phase,
         voltage,
         BATTERY_LOW_VOLTAGE_ENTER_V);
-    printf("%s battery low, entering led/buzzer alarm mode\n", phase);
+    printf("%s battery low, alarming for %d ms before deep sleep\n",
+           phase,
+           LOW_VOLTAGE_ALARM_DURATION_MS);
 
     if (stop_motion) {
         command_mux_set_motion_blocked(true);
     }
 
+    status_led_on();
     buzzer_on();
-
-    while (1) {
-        status_led_toggle();
+    for (int elapsed_ms = 0;
+         elapsed_ms < LOW_VOLTAGE_ALARM_DURATION_MS;
+         elapsed_ms += LOW_VOLTAGE_BLINK_PERIOD_MS) {
         vTaskDelay(pdMS_TO_TICKS(LOW_VOLTAGE_BLINK_PERIOD_MS));
+        status_led_toggle();
+        buzzer_toggle();
     }
+
+    buzzer_off();
+    status_led_off();
+
+    if (stop_motion) {
+        /* Release the motor brake before sleeping to minimize external load. */
+        motor_pid_controller_stop(false);
+    }
+
+    printf("battery protection entering deep sleep; power-cycle after charging\n");
+    fflush(stdout);
+    ESP_ERROR_CHECK(esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL));
+    esp_deep_sleep_start();
 }
 
 static void app_handle_startup_low_voltage(void)
@@ -137,12 +158,17 @@ void app_main(void)
     servo_controller_center();
     printf("servo init ok\n");
 
-    ackermann_controller_init();
-    printf("ackermann controller init ok\n");
+    Icm42670p_Init();
+    printf("imu init start\n");
+
+    differential_controller_init();
+    printf("differential controller init ok\n");
     command_mux_init();
     printf("command mux init ok\n");
-    motor_pid_controller_set_pid(0.8f, 0.05f, 0.0f);
+    motor_pid_controller_set_pid(0.8f, 0.15f, 0.0f);
     printf("motor pid init ok\n");
+    odometry_estimator_init();
+    printf("odometry estimator init ok\n");
     telemetry_buffer_init();
     printf("telemetry buffer init ok\n");
 
@@ -151,9 +177,6 @@ void app_main(void)
 
     ros_executor_start();
     printf("ros executor init ok\n");
-
-    Icm42670p_Init();
-    printf("imu init start\n");
 
     while (1) {
         if (battery_monitor_is_low()) {
