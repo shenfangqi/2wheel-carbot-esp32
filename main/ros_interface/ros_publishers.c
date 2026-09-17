@@ -20,7 +20,6 @@
 #include "drivers/battery_monitor.h"
 #include "icm42670p.h"
 #include "ros_interface/ros_executor.h"
-#include "ros_interface/imu_units.h"
 #include "ros_interface/publisher_schedule.h"
 #include "ros_interface/ros_time.h"
 #include "ros_interface/ros_topics.h"
@@ -75,17 +74,17 @@ static void ros_publishers_timer_callback(rcl_timer_t *timer, int64_t last_call_
     }
 
     if (s_imu_ready && Icm42670p_Start_OK() > 0) {
-        float acceleration_g[3] = {0};
-        float angular_velocity_dps[3] = {0};
-        Icm42670p_Get_Accel_g(acceleration_g);
-        Icm42670p_Get_Gyro_dps(angular_velocity_dps);
+        float acceleration_m_s2[3] = {0};
+        float angular_velocity_rad_s[3] = {0};
+        Icm42670p_Get_Accel_m_s2(acceleration_m_s2);
+        Icm42670p_Get_Gyro_rad_s(angular_velocity_rad_s);
         ros_time_stamp_from_device_us(snapshot.device_stamp_us, &s_imu_msg.header.stamp);
-        s_imu_msg.angular_velocity.x = carbot_dps_to_rad_s(angular_velocity_dps[0]);
-        s_imu_msg.angular_velocity.y = carbot_dps_to_rad_s(angular_velocity_dps[1]);
-        s_imu_msg.angular_velocity.z = carbot_dps_to_rad_s(angular_velocity_dps[2]);
-        s_imu_msg.linear_acceleration.x = carbot_g_to_m_s2(acceleration_g[0]);
-        s_imu_msg.linear_acceleration.y = carbot_g_to_m_s2(acceleration_g[1]);
-        s_imu_msg.linear_acceleration.z = carbot_g_to_m_s2(acceleration_g[2]);
+        s_imu_msg.angular_velocity.x = angular_velocity_rad_s[0];
+        s_imu_msg.angular_velocity.y = angular_velocity_rad_s[1];
+        s_imu_msg.angular_velocity.z = angular_velocity_rad_s[2];
+        s_imu_msg.linear_acceleration.x = acceleration_m_s2[0];
+        s_imu_msg.linear_acceleration.y = acceleration_m_s2[1];
+        s_imu_msg.linear_acceleration.z = acceleration_m_s2[2];
         if (rcl_publish(&s_imu_publisher, &s_imu_msg, NULL) != RCL_RET_OK) {
             ESP_LOGE(TAG, "IMU publish failed");
             s_healthy = false;
@@ -115,6 +114,9 @@ static void ros_publishers_timer_callback(rcl_timer_t *timer, int64_t last_call_
         s_status_msg.active_command_source = (uint8_t)command_mux_get_active_source();
         s_status_msg.invalid_cmd_count = command_mux_get_invalid_command_count();
         s_status_msg.reconnect_count = ros_executor_get_reconnect_count();
+        s_status_msg.last_disconnect_reason = (uint8_t)ros_executor_get_last_disconnect_reason();
+        s_status_msg.consecutive_ping_failures = ros_executor_get_consecutive_ping_failures();
+        s_status_msg.session_uptime_ms = ros_executor_get_session_uptime_ms();
         s_status_msg.clock_offset_ns = ros_time_get_offset_ns();
         if (rcl_publish(&s_status_publisher, &s_status_msg, NULL) != RCL_RET_OK) {
             ESP_LOGE(TAG, "status publish failed");

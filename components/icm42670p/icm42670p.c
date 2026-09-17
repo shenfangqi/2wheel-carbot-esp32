@@ -17,6 +17,7 @@
 
 #include "i2c_master.h"
 #include "inv_imu_driver.h"
+#include "icm42670p_units.h"
 
 
 
@@ -31,8 +32,8 @@ static volatile int isr_count = 0;
 
 static int16_t  icm_accel[3];
 static int16_t  icm_gyro[3];
-static float    icm_accel_g[3];
-static float    icm_gyro_dps[3];
+static float    icm_accel_m_s2[3];
+static float    icm_gyro_rad_s[3];
 static uint16_t icm_accel_fsr_g = 0;
 static uint16_t icm_gyro_fsr_dps = 0;
 static int      icm_start_ok = 0;
@@ -210,12 +211,12 @@ static void imu_callback(inv_imu_sensor_event_t *event)
      * ±2g:accel*2*9.8/32767=accel/1671.84(m/s^2)
      * ±500dps:gyro*500*PI/180/32767=gyro/3754.9(rad/s)
 	*/
-	icm_accel_g[0]  = (float)(icm_accel[0] * icm_accel_fsr_g * 9.8) / (float)INT16_MAX;
-	icm_accel_g[1]  = (float)(icm_accel[1] * icm_accel_fsr_g * 9.8) / (float)INT16_MAX;
-	icm_accel_g[2]  = (float)(icm_accel[2] * icm_accel_fsr_g * 9.8) / (float)INT16_MAX;
-	icm_gyro_dps[0] = (float)(icm_gyro[0] * icm_gyro_fsr_dps * M_PI) / 180 / (float)INT16_MAX;
-	icm_gyro_dps[1] = (float)(icm_gyro[1] * icm_gyro_fsr_dps * M_PI) / 180 / (float)INT16_MAX;
-	icm_gyro_dps[2] = (float)(icm_gyro[2] * icm_gyro_fsr_dps * M_PI) / 180 / (float)INT16_MAX;
+	icm_accel_m_s2[0] = icm42670p_raw_to_accel_m_s2(icm_accel[0], icm_accel_fsr_g);
+	icm_accel_m_s2[1] = icm42670p_raw_to_accel_m_s2(icm_accel[1], icm_accel_fsr_g);
+	icm_accel_m_s2[2] = icm42670p_raw_to_accel_m_s2(icm_accel[2], icm_accel_fsr_g);
+	icm_gyro_rad_s[0] = icm42670p_raw_to_gyro_rad_s(icm_gyro[0], icm_gyro_fsr_dps);
+	icm_gyro_rad_s[1] = icm42670p_raw_to_gyro_rad_s(icm_gyro[1], icm_gyro_fsr_dps);
+	icm_gyro_rad_s[2] = icm42670p_raw_to_gyro_rad_s(icm_gyro[2], icm_gyro_fsr_dps);
 }
 
 
@@ -400,20 +401,20 @@ void Icm42670p_Get_Gyro_RawData(int16_t gyro[3])
 
 // 获取加速度计缩放后的数据
 // Get the accelerometer scaled data
-void Icm42670p_Get_Accel_g(float accel_g[3])
+void Icm42670p_Get_Accel_m_s2(float accel_m_s2[3])
 {
-    accel_g[0] = icm_accel_g[0];
-    accel_g[1] = icm_accel_g[1];
-    accel_g[2] = icm_accel_g[2];
+    accel_m_s2[0] = icm_accel_m_s2[0];
+    accel_m_s2[1] = icm_accel_m_s2[1];
+    accel_m_s2[2] = icm_accel_m_s2[2];
 }
 
 // 获取陀螺仪的缩放后的数据
 // Get the zoom data of the gyroscope
-void Icm42670p_Get_Gyro_dps(float gyro_dps[3])
+void Icm42670p_Get_Gyro_rad_s(float gyro_rad_s[3])
 {
-    gyro_dps[0] = icm_gyro_dps[0];
-    gyro_dps[1] = icm_gyro_dps[1];
-    gyro_dps[2] = icm_gyro_dps[2];
+    gyro_rad_s[0] = icm_gyro_rad_s[0];
+    gyro_rad_s[1] = icm_gyro_rad_s[1];
+    gyro_rad_s[2] = icm_gyro_rad_s[2];
 }
 
 // IMU初始化成功返回1，失败返回-1，正在初始化返回0
@@ -439,5 +440,4 @@ void Icm42670p_Init(void)
     // 开启IMU任务 Start an IMU task
     xTaskCreatePinnedToCore(Icm42670p_Task, "Icm42670p_Task", 5*1024, NULL, 5, NULL, 1);
 }
-
 

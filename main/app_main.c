@@ -91,7 +91,7 @@ static void app_log_pid_status(const char *phase)
 {
     motor_pid_telemetry_t m1 = {0};
     motor_pid_telemetry_t m3 = {0};
-    float gyro_dps[3] = {0};
+    float gyro_rad_s[3] = {0};
     int imu_start_status = Icm42670p_Start_OK();
 
     motor_pid_controller_get_m1_telemetry(&m1);
@@ -99,8 +99,8 @@ static void app_log_pid_status(const char *phase)
 
     if (imu_start_status > 0) {
         s_imu_ready_for_telemetry = true;
-        Icm42670p_Get_Gyro_dps(gyro_dps);
-        telemetry_buffer_push(phase, &m1, &m3, gyro_dps[2], imu_start_status);
+        Icm42670p_Get_Gyro_rad_s(gyro_rad_s);
+        telemetry_buffer_push(phase, &m1, &m3, gyro_rad_s[2], imu_start_status);
         ESP_LOGI(
             TAG,
             "%s | m1 target=%.2f actual=%.2f pwm=%d | m3 target=%.2f actual=%.2f pwm=%d | gyro_z=%.4f",
@@ -111,7 +111,7 @@ static void app_log_pid_status(const char *phase)
             m3.target_rpm,
             m3.actual_rpm,
             m3.pwm_output,
-            gyro_dps[2]);
+            gyro_rad_s[2]);
         return;
     }
 

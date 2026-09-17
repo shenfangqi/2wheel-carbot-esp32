@@ -1,11 +1,13 @@
 #include "ros_executor.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include <rcl/rcl.h>
 #include <rcl/error_handling.h>
@@ -17,6 +19,7 @@
 #include "network/uros_transport.h"
 #include "network/wifi_manager.h"
 #include "ros_interface/ros_publishers.h"
+#include "ros_interface/ros_health.h"
 #include "ros_interface/ros_subscribers.h"
 #include "ros_interface/ros_topics.h"
 #include "ros_interface/ros_time.h"
@@ -24,6 +27,24 @@
 static const char *TAG = "ros_executor";
 static TaskHandle_t s_ros_task_handle = NULL;
 static uint32_t s_reconnect_count = 0;
+static ros_disconnect_reason_t s_last_disconnect_reason = ROS_DISCONNECT_NONE;
+static uint32_t s_consecutive_ping_failures = 0;
+static int64_t s_session_started_us = 0;
+static uint64_t s_last_session_uptime_ms = 0;
+static bool s_session_active = false;
+
+static const char *ros_executor_disconnect_reason_name(ros_disconnect_reason_t reason)
+{
+    switch (reason) {
+    case ROS_DISCONNECT_WIFI: return "wifi";
+    case ROS_DISCONNECT_EXECUTOR: return "executor";
+    case ROS_DISCONNECT_PUBLISHER: return "publisher";
+    case ROS_DISCONNECT_AGENT_PING: return "agent_ping";
+    case ROS_DISCONNECT_ENTITY_INIT: return "entity_init";
+    case ROS_DISCONNECT_NONE:
+    default: return "none";
+    }
+}
 
 static void ros_executor_log_rcl_ret(const char *op, rcl_ret_t rc)
 {
@@ -102,12 +123,14 @@ static void ros_executor_task(void *arg)
         bool executor_ready = false;
 
         if (!wifi_manager_is_connected()) {
+            s_last_disconnect_reason = ROS_DISCONNECT_WIFI;
             ros_executor_stop_ros_motion();
             vTaskDelay(pdMS_TO_TICKS(500));
             continue;
         }
 
         if (ros_executor_connect_support(&support, &allocator) != ESP_OK) {
+            s_last_disconnect_reason = ROS_DISCONNECT_ENTITY_INIT;
             ros_executor_stop_ros_motion();
             vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
@@ -122,6 +145,7 @@ static void ros_executor_task(void *arg)
 
         if (rclc_node_init_default(&node, ROS_NODE_NAME, CONFIG_CARBOT_MICRO_ROS_NAMESPACE, &support) != RCL_RET_OK) {
             ESP_LOGE(TAG, "node init failed");
+            s_last_disconnect_reason = ROS_DISCONNECT_ENTITY_INIT;
             goto cleanup;
         }
         node_ready = true;
@@ -133,41 +157,80 @@ static void ros_executor_task(void *arg)
 
         if (rclc_executor_init(&executor, &support.context, 2, &allocator) != RCL_RET_OK) {
             ESP_LOGE(TAG, "executor init failed");
+            s_last_disconnect_reason = ROS_DISCONNECT_ENTITY_INIT;
             goto cleanup;
         }
         executor_ready = true;
 
         if (ros_publishers_init(&node, &support, &executor) != ESP_OK) {
             ESP_LOGE(TAG, "publisher init failed");
+            s_last_disconnect_reason = ROS_DISCONNECT_ENTITY_INIT;
             goto cleanup;
         }
 
         if (ros_subscribers_init(&node, &executor) != ESP_OK) {
             ESP_LOGE(TAG, "subscriber init failed");
+            s_last_disconnect_reason = ROS_DISCONNECT_ENTITY_INIT;
             goto cleanup;
         }
         s_reconnect_count++;
+        s_consecutive_ping_failures = 0;
+        s_session_started_us = esp_timer_get_time();
+        s_session_active = true;
 
-        uint32_t health_check_counter = 0;
+        int64_t last_health_check_ms = s_session_started_us / 1000;
         while (wifi_manager_is_connected()) {
             rcl_ret_t rc = rclc_executor_spin_some(&executor, RCL_MS_TO_NS(CONFIG_CARBOT_MICRO_ROS_SPIN_PERIOD_MS));
             ros_subscribers_check_timeout(CONFIG_CARBOT_MICRO_ROS_CMD_VEL_TIMEOUT_MS);
-            if (rc != RCL_RET_OK || !ros_publishers_is_healthy()) {
+            if (rc != RCL_RET_OK) {
                 ESP_LOGE(TAG, "executor spin failed: %d", (int)rc);
+                s_last_disconnect_reason = ROS_DISCONNECT_EXECUTOR;
                 break;
             }
-            health_check_counter++;
-            if (health_check_counter >= 20) {
-                health_check_counter = 0;
-                if (rmw_uros_ping_agent(100, 1) != RMW_RET_OK) {
-                    ESP_LOGE(TAG, "agent health check failed");
+            if (!ros_publishers_is_healthy()) {
+                ESP_LOGE(TAG, "publisher health check failed");
+                s_last_disconnect_reason = ROS_DISCONNECT_PUBLISHER;
+                break;
+            }
+
+            int64_t now_ms = esp_timer_get_time() / 1000;
+            if (ros_health_check_due(
+                    now_ms,
+                    last_health_check_ms,
+                    CONFIG_CARBOT_MICRO_ROS_HEALTH_CHECK_INTERVAL_MS)) {
+                last_health_check_ms = now_ms;
+                bool ping_succeeded = rmw_uros_ping_agent(
+                    CONFIG_CARBOT_MICRO_ROS_HEALTH_CHECK_TIMEOUT_MS,
+                    CONFIG_CARBOT_MICRO_ROS_HEALTH_CHECK_ATTEMPTS) == RMW_RET_OK;
+                if (ros_health_record_ping_result(
+                        &s_consecutive_ping_failures,
+                        ping_succeeded,
+                        CONFIG_CARBOT_MICRO_ROS_HEALTH_CHECK_FAILURE_LIMIT)) {
+                    s_last_disconnect_reason = ROS_DISCONNECT_AGENT_PING;
+                    ESP_LOGE(
+                        TAG,
+                        "agent health check failed %" PRIu32 " consecutive rounds",
+                        s_consecutive_ping_failures);
                     break;
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(1));
         }
+        if (!wifi_manager_is_connected()) {
+            s_last_disconnect_reason = ROS_DISCONNECT_WIFI;
+        }
 
 cleanup:
+        if (s_session_active) {
+            s_last_session_uptime_ms =
+                (uint64_t)((esp_timer_get_time() - s_session_started_us) / 1000);
+            s_session_active = false;
+            ESP_LOGE(
+                TAG,
+                "micro-ROS session ended: reason=%s uptime_ms=%" PRIu64,
+                ros_executor_disconnect_reason_name(s_last_disconnect_reason),
+                s_last_session_uptime_ms);
+        }
         ros_executor_stop_ros_motion();
         ros_subscribers_fini(&node, &executor);
         ros_publishers_fini(&node, &executor);
@@ -190,6 +253,24 @@ cleanup:
 uint32_t ros_executor_get_reconnect_count(void)
 {
     return s_reconnect_count > 0 ? s_reconnect_count - 1 : 0;
+}
+
+ros_disconnect_reason_t ros_executor_get_last_disconnect_reason(void)
+{
+    return s_last_disconnect_reason;
+}
+
+uint32_t ros_executor_get_consecutive_ping_failures(void)
+{
+    return s_consecutive_ping_failures;
+}
+
+uint64_t ros_executor_get_session_uptime_ms(void)
+{
+    if (s_session_active) {
+        return (uint64_t)((esp_timer_get_time() - s_session_started_us) / 1000);
+    }
+    return s_last_session_uptime_ms;
 }
 
 void ros_executor_start(void)

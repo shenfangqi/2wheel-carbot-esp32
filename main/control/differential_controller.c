@@ -123,7 +123,7 @@ static void differential_heading_task(void *arg)
         float gyro_rad_s[3] = {0};
 
         if (imu_status > 0) {
-            Icm42670p_Get_Gyro_dps(gyro_rad_s);
+            Icm42670p_Get_Gyro_rad_s(gyro_rad_s);
         }
 
         if (!imu_calibrated && imu_status > 0 && stopped) {

@@ -59,7 +59,7 @@ idf.py build
 idf.py menuconfig
 ```
 
-菜单位于 `Carbot micro-ROS settings`。当前默认值为：启用 micro-ROS、Domain ID 0、`cmd_vel` 超时 500 ms、executor 周期 50 ms。
+菜单位于 `Carbot micro-ROS settings`。当前默认值为：启用 micro-ROS、Domain ID 0、`cmd_vel` 超时 500 ms、executor 周期 50 ms。运行期 Agent 健康检查每 5 秒执行一次，每轮最多进行 2 次 150 ms 尝试，连续 3 轮失败才重建会话。
 
 ## 烧录与串口监控
 
@@ -196,7 +196,9 @@ curl "http://<local_ip>/telemetry" -o carbot-telemetry.csv
 ROS 2 workspace 中复制或引用该包并执行 `colcon build`，否则无法解析
 `/wheel_ticks` 和 `/carbot/status`。轮计数消息同时包含 64 位左右累计计数、
 `sequence`、`boot_id` 和 ESP32 单调时钟 `device_stamp_us`。Jetson 发现 `boot_id`
-变化时必须重置增量基准。
+变化时必须重置增量基准。状态消息还包含最后一次断开原因、连续 Agent ping
+失败次数和当前/上一次 session 存活时间；修改消息定义后必须在 Jetson workspace
+中重新构建 `carbot_msgs`。
 
 固件会拒绝非有限值以及超过 `0.5 m/s`、`3.5 rad/s` 的命令，并在 20 ms 控制循环
 中限制线加速度为 `0.5 m/s²`、角加速度为 `2.5 rad/s²`。这些限制独立于 Jetson

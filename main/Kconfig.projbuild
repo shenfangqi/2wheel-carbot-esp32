@@ -33,4 +33,24 @@ menu "Carbot micro-ROS settings"
         default 50
         range 5 1000
 
+    config CARBOT_MICRO_ROS_HEALTH_CHECK_INTERVAL_MS
+        int "Connected Agent health-check interval (ms)"
+        default 5000
+        range 1000 60000
+
+    config CARBOT_MICRO_ROS_HEALTH_CHECK_TIMEOUT_MS
+        int "Agent health-check attempt timeout (ms)"
+        default 150
+        range 25 400
+
+    config CARBOT_MICRO_ROS_HEALTH_CHECK_ATTEMPTS
+        int "Attempts per Agent health check"
+        default 2
+        range 1 3
+
+    config CARBOT_MICRO_ROS_HEALTH_CHECK_FAILURE_LIMIT
+        int "Consecutive failed health checks before reconnect"
+        default 3
+        range 2 10
+
 endmenu

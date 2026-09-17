@@ -69,8 +69,8 @@ static void imu_static_test_task(void *arg)
     for (int sample = 0; sample < sample_count; ++sample) {
         float gyro_rad_s[3] = {0};
         float accel_m_s2[3] = {0};
-        Icm42670p_Get_Gyro_dps(gyro_rad_s);
-        Icm42670p_Get_Accel_g(accel_m_s2);
+        Icm42670p_Get_Gyro_rad_s(gyro_rad_s);
+        Icm42670p_Get_Accel_m_s2(accel_m_s2);
 
         for (int axis = 0; axis < 3; ++axis) {
             double delta = gyro_rad_s[axis] - gyro_mean[axis];
@@ -222,7 +222,7 @@ static void track_distance_test_task(void *arg)
         }
         for (int sample = 0; sample < 100; ++sample) {
             float gyro_rad_s[3] = {0};
-            Icm42670p_Get_Gyro_dps(gyro_rad_s);
+            Icm42670p_Get_Gyro_rad_s(gyro_rad_s);
             gyro_z_bias_rad_s += gyro_rad_s[2] / 100.0f;
             vTaskDelay(pdMS_TO_TICKS(10));
         }
@@ -239,7 +239,7 @@ static void track_distance_test_task(void *arg)
             const float max_correction = 0.15f;
             float gyro_rad_s[3] = {0};
             int64_t now_imu_us = esp_timer_get_time();
-            Icm42670p_Get_Gyro_dps(gyro_rad_s);
+            Icm42670p_Get_Gyro_rad_s(gyro_rad_s);
             float yaw_rate_rad_s = gyro_rad_s[2] - gyro_z_bias_rad_s;
             imu_yaw_rad += yaw_rate_rad_s *
                            ((now_imu_us - last_imu_us) / 1000000.0f);
@@ -322,7 +322,7 @@ static void track_turn_test_task(void *arg)
 
     for (int sample = 0; sample < 100; ++sample) {
         float gyro_rad_s[3] = {0};
-        Icm42670p_Get_Gyro_dps(gyro_rad_s);
+        Icm42670p_Get_Gyro_rad_s(gyro_rad_s);
         gyro_z_bias_rad_s += gyro_rad_s[2] / 100.0f;
         vTaskDelay(pdMS_TO_TICKS(10));
     }
@@ -333,7 +333,7 @@ static void track_turn_test_task(void *arg)
     while ((xTaskGetTickCount() - start_ticks) < timeout_ticks) {
         float gyro_rad_s[3] = {0};
         int64_t now_imu_us = esp_timer_get_time();
-        Icm42670p_Get_Gyro_dps(gyro_rad_s);
+        Icm42670p_Get_Gyro_rad_s(gyro_rad_s);
         imu_yaw_rad += (gyro_rad_s[2] - gyro_z_bias_rad_s) *
                        ((now_imu_us - last_imu_us) / 1000000.0f);
         last_imu_us = now_imu_us;

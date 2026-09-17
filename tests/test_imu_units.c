@@ -1,11 +1,13 @@
 #include <assert.h>
 #include <math.h>
 
-#include "ros_interface/imu_units.h"
+#include "icm42670p_units.h"
 
 int main(void)
 {
-    assert(fabs(carbot_dps_to_rad_s(180.0f) - 3.141592653589793) < 1e-9);
-    assert(fabs(carbot_g_to_m_s2(1.0f) - 9.80665) < 1e-9);
+    assert(fabsf(icm42670p_raw_to_accel_m_s2(INT16_MAX, 4) - 39.2266f) < 1e-5f);
+    assert(fabsf(icm42670p_raw_to_accel_m_s2(INT16_MAX / 4, 4) - 9.80665f) < 0.001f);
+    assert(fabsf(icm42670p_raw_to_gyro_rad_s(INT16_MAX, 2000) -
+                 (2000.0f * ICM42670P_PI / 180.0f)) < 1e-5f);
     return 0;
 }
