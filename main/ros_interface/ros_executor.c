@@ -151,7 +151,7 @@ static void ros_executor_task(void *arg)
         node_ready = true;
 
         ros_time_reset();
-        if (!ros_time_sync()) {
+        if (!ros_time_sync(1000)) {
             ESP_LOGW(TAG, "micro-ROS epoch synchronization failed");
         }
 
@@ -179,6 +179,7 @@ static void ros_executor_task(void *arg)
         s_session_active = true;
 
         int64_t last_health_check_ms = s_session_started_us / 1000;
+        int64_t last_time_sync_ms = last_health_check_ms;
         while (wifi_manager_is_connected()) {
             rcl_ret_t rc = rclc_executor_spin_some(&executor, RCL_MS_TO_NS(CONFIG_CARBOT_MICRO_ROS_SPIN_PERIOD_MS));
             ros_subscribers_check_timeout(CONFIG_CARBOT_MICRO_ROS_CMD_VEL_TIMEOUT_MS);
@@ -212,6 +213,15 @@ static void ros_executor_task(void *arg)
                         "agent health check failed %" PRIu32 " consecutive rounds",
                         s_consecutive_ping_failures);
                     break;
+                }
+            }
+            if (ros_health_check_due(
+                    now_ms,
+                    last_time_sync_ms,
+                    CONFIG_CARBOT_MICRO_ROS_TIME_SYNC_INTERVAL_MS)) {
+                last_time_sync_ms = now_ms;
+                if (!ros_time_sync(CONFIG_CARBOT_MICRO_ROS_TIME_SYNC_TIMEOUT_MS)) {
+                    ESP_LOGW(TAG, "periodic micro-ROS epoch synchronization failed");
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(1));

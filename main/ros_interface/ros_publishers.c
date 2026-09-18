@@ -42,6 +42,10 @@ static bool s_timer_ready;
 static bool s_healthy;
 static uint32_t s_publish_cycle;
 static uint64_t s_status_sequence;
+static uint64_t s_wheel_ticks_last_stamp_ns;
+static uint64_t s_imu_last_stamp_ns;
+static uint64_t s_battery_last_stamp_ns;
+static uint64_t s_status_last_stamp_ns;
 
 static void ros_publishers_set_frame_id(std_msgs__msg__Header *header, char *frame_id)
 {
@@ -65,7 +69,8 @@ static void ros_publishers_timer_callback(rcl_timer_t *timer, int64_t last_call_
     s_wheel_ticks_msg.device_stamp_us = snapshot.device_stamp_us;
     s_wheel_ticks_msg.left_ticks = snapshot.left_ticks;
     s_wheel_ticks_msg.right_ticks = snapshot.right_ticks;
-    ros_time_stamp_from_device_us(snapshot.device_stamp_us, &s_wheel_ticks_msg.header.stamp);
+    ros_time_stamp_from_device_us(snapshot.device_stamp_us, &s_wheel_ticks_last_stamp_ns,
+                                  &s_wheel_ticks_msg.header.stamp);
 
     if (rcl_publish(&s_wheel_ticks_publisher, &s_wheel_ticks_msg, NULL) != RCL_RET_OK) {
         ESP_LOGE(TAG, "wheel ticks publish failed");
@@ -78,7 +83,8 @@ static void ros_publishers_timer_callback(rcl_timer_t *timer, int64_t last_call_
         float angular_velocity_rad_s[3] = {0};
         Icm42670p_Get_Accel_m_s2(acceleration_m_s2);
         Icm42670p_Get_Gyro_rad_s(angular_velocity_rad_s);
-        ros_time_stamp_from_device_us(snapshot.device_stamp_us, &s_imu_msg.header.stamp);
+        ros_time_stamp_from_device_us(snapshot.device_stamp_us, &s_imu_last_stamp_ns,
+                                      &s_imu_msg.header.stamp);
         s_imu_msg.angular_velocity.x = angular_velocity_rad_s[0];
         s_imu_msg.angular_velocity.y = angular_velocity_rad_s[1];
         s_imu_msg.angular_velocity.z = angular_velocity_rad_s[2];
@@ -94,7 +100,8 @@ static void ros_publishers_timer_callback(rcl_timer_t *timer, int64_t last_call_
 
     s_publish_cycle++;
     if (carbot_is_slow_publish_cycle(s_publish_cycle)) {
-        ros_time_stamp_from_device_us(snapshot.device_stamp_us, &s_battery_msg.header.stamp);
+        ros_time_stamp_from_device_us(snapshot.device_stamp_us, &s_battery_last_stamp_ns,
+                                      &s_battery_msg.header.stamp);
         s_battery_msg.voltage = battery_monitor_get_voltage();
         if (rcl_publish(&s_battery_publisher, &s_battery_msg, NULL) != RCL_RET_OK) {
             ESP_LOGE(TAG, "battery publish failed");
@@ -102,7 +109,8 @@ static void ros_publishers_timer_callback(rcl_timer_t *timer, int64_t last_call_
             return;
         }
 
-        ros_time_stamp_from_device_us(snapshot.device_stamp_us, &s_status_msg.header.stamp);
+        ros_time_stamp_from_device_us(snapshot.device_stamp_us, &s_status_last_stamp_ns,
+                                      &s_status_msg.header.stamp);
         s_status_msg.sequence = ++s_status_sequence;
         s_status_msg.boot_id = snapshot.boot_id;
         s_status_msg.device_stamp_us = snapshot.device_stamp_us;
@@ -118,6 +126,8 @@ static void ros_publishers_timer_callback(rcl_timer_t *timer, int64_t last_call_
         s_status_msg.consecutive_ping_failures = ros_executor_get_consecutive_ping_failures();
         s_status_msg.session_uptime_ms = ros_executor_get_session_uptime_ms();
         s_status_msg.clock_offset_ns = ros_time_get_offset_ns();
+        s_status_msg.last_time_sync_age_ms = ros_time_get_last_sync_age_ms();
+        s_status_msg.time_sync_fail_count = ros_time_get_sync_fail_count();
         if (rcl_publish(&s_status_publisher, &s_status_msg, NULL) != RCL_RET_OK) {
             ESP_LOGE(TAG, "status publish failed");
             s_healthy = false;
@@ -157,6 +167,10 @@ esp_err_t ros_publishers_init(rcl_node_t *node, rclc_support_t *support, rclc_ex
     s_battery_msg.power_supply_technology = sensor_msgs__msg__BatteryState__POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
     s_battery_msg.present = true;
     s_publish_cycle = 0;
+    s_wheel_ticks_last_stamp_ns = UINT64_MAX;
+    s_imu_last_stamp_ns = UINT64_MAX;
+    s_battery_last_stamp_ns = UINT64_MAX;
+    s_status_last_stamp_ns = UINT64_MAX;
     s_healthy = true;
 
     if (rclc_publisher_init_best_effort(

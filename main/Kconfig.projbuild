@@ -53,4 +53,19 @@ menu "Carbot micro-ROS settings"
         default 3
         range 2 10
 
+    config CARBOT_MICRO_ROS_TIME_SYNC_INTERVAL_MS
+        int "Connected session time resynchronization interval (ms)"
+        default 60000
+        range 10000 3600000
+
+    config CARBOT_MICRO_ROS_TIME_SYNC_TIMEOUT_MS
+        int "Time resynchronization timeout (ms)"
+        default 50
+        range 10 250
+
+    config CARBOT_MICRO_ROS_TIME_SLEW_PPM
+        int "Maximum ROS clock offset correction rate (ppm)"
+        default 1000
+        range 1 100000
+
 endmenu

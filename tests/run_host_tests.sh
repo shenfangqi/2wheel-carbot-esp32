@@ -38,4 +38,6 @@ grep -q '^uint32 invalid_cmd_count$' "$repo_dir/extra_ros_packages/carbot_msgs/m
 grep -q '^uint8 last_disconnect_reason$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
 grep -q '^uint32 consecutive_ping_failures$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
 grep -q '^uint64 session_uptime_ms$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
+grep -q '^uint64 last_time_sync_age_ms$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
+grep -q '^uint32 time_sync_fail_count$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
 echo "host unit tests passed"

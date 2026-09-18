@@ -20,3 +20,5 @@ uint8 last_disconnect_reason
 uint32 consecutive_ping_failures
 uint64 session_uptime_ms
 int64 clock_offset_ns
+uint64 last_time_sync_age_ms
+uint32 time_sync_fail_count
