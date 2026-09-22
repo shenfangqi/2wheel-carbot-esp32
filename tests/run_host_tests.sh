@@ -18,8 +18,14 @@ cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   "$repo_dir/tests/test_ros_time_math.c" -o "$test_dir/test_ros_time_math"
 "$test_dir/test_ros_time_math"
 cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
+  "$repo_dir/tests/test_ros_time_state.c" -o "$test_dir/test_ros_time_state"
+"$test_dir/test_ros_time_state"
+cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   "$repo_dir/tests/test_ros_health.c" -o "$test_dir/test_ros_health"
 "$test_dir/test_ros_health"
+cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
+  "$repo_dir/tests/test_ros_watchdog.c" -o "$test_dir/test_ros_watchdog"
+"$test_dir/test_ros_watchdog"
 cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   "$repo_dir/tests/test_publisher_schedule.c" -o "$test_dir/test_publisher_schedule"
 "$test_dir/test_publisher_schedule"

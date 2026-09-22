@@ -10,6 +10,8 @@ int main(void)
     assert(ros_time_slew_offset(1000, 5000, 20000, 1000) == 5000);
     assert(ros_time_slew_offset(1000, 50000, 20000, 1000) == 21000);
     assert(ros_time_slew_offset(50000, 1000, 20000, 1000) == 30000);
+    assert(ros_time_slew_offset(-50000, -1000, 20000, 1000) == -30000);
+    assert(ros_time_slew_offset(-1000, -50000, 20000, 1000) == -21000);
     assert(ros_time_make_strictly_monotonic(100, UINT64_MAX) == 100);
     assert(ros_time_make_strictly_monotonic(101, 100) == 101);
     assert(ros_time_make_strictly_monotonic(100, 100) == 101);

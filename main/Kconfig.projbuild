@@ -28,6 +28,21 @@ menu "Carbot micro-ROS settings"
         default 500
         range 50 10000
 
+    config CARBOT_MICRO_ROS_WATCHDOG_PERIOD_MS
+        int "cmd_vel watchdog polling period (ms)"
+        default 10
+        range 1 100
+
+    config CARBOT_MICRO_ROS_WATCHDOG_TASK_STACK
+        int "cmd_vel watchdog task stack (bytes)"
+        default 3072
+        range 2048 8192
+
+    config CARBOT_MICRO_ROS_WATCHDOG_TASK_PRIO
+        int "cmd_vel watchdog task priority"
+        default 6
+        range 1 24
+
     config CARBOT_MICRO_ROS_SPIN_PERIOD_MS
         int "Executor spin period (ms)"
         default 50

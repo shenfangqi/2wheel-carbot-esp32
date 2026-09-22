@@ -182,7 +182,6 @@ static void ros_executor_task(void *arg)
         int64_t last_time_sync_ms = last_health_check_ms;
         while (wifi_manager_is_connected()) {
             rcl_ret_t rc = rclc_executor_spin_some(&executor, RCL_MS_TO_NS(CONFIG_CARBOT_MICRO_ROS_SPIN_PERIOD_MS));
-            ros_subscribers_check_timeout(CONFIG_CARBOT_MICRO_ROS_CMD_VEL_TIMEOUT_MS);
             if (rc != RCL_RET_OK) {
                 ESP_LOGE(TAG, "executor spin failed: %d", (int)rc);
                 s_last_disconnect_reason = ROS_DISCONNECT_EXECUTOR;
@@ -291,6 +290,11 @@ void ros_executor_start(void)
     }
 
     if (s_ros_task_handle != NULL) {
+        return;
+    }
+
+    if (ros_subscribers_start_watchdog() != ESP_OK) {
+        printf("ros cmd_vel watchdog start failed\n");
         return;
     }
 
