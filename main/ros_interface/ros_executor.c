@@ -9,13 +9,16 @@
 #include "esp_timer.h"
 
 #include <rcl/rcl.h>
+#include <rcl/context.h>
 #include <rcl/error_handling.h>
 #include <rclc/executor.h>
 #include <rclc/rclc.h>
 #include <rmw_microros/rmw_microros.h>
+#include <rmw_microros/timing.h>
 
 #include "control/command_mux.h"
 #include "network/uros_transport.h"
+#include "ros_interface/ros_executor_policy.h"
 #include "ros_interface/ros_publishers.h"
 #include "ros_interface/ros_health.h"
 #include "ros_interface/ros_subscribers.h"
@@ -99,6 +102,14 @@ static esp_err_t ros_executor_connect_support(rclc_support_t *support, rcl_alloc
         return ESP_FAIL;
     }
 
+    rmw_context_t *rmw_context = rcl_context_get_rmw_context(&support->context);
+    if (rmw_context == NULL ||
+        rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0) != RMW_RET_OK) {
+        ESP_LOGE(TAG, "configure non-blocking entity cleanup failed");
+        ros_executor_log_rcl_ret("rclc_support_fini", rclc_support_fini(support));
+        return ESP_FAIL;
+    }
+
     return ESP_OK;
 }
 
@@ -164,7 +175,8 @@ static void ros_executor_task(void *arg)
         int64_t last_time_sync_ms = last_health_check_ms;
         while (uros_transport_is_open()) {
             rcl_ret_t rc = rclc_executor_spin_some(&executor, RCL_MS_TO_NS(CONFIG_CARBOT_MICRO_ROS_SPIN_PERIOD_MS));
-            if (rc != RCL_RET_OK) {
+            if (!ros_executor_spin_result_is_normal(
+                    rc == RCL_RET_OK, rc == RCL_RET_TIMEOUT)) {
                 ESP_LOGE(TAG, "executor spin failed: %d", (int)rc);
                 s_last_disconnect_reason = ROS_DISCONNECT_EXECUTOR;
                 break;

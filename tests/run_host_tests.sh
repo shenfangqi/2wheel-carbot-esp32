@@ -27,6 +27,9 @@ cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   "$repo_dir/tests/test_ros_health.c" -o "$test_dir/test_ros_health"
 "$test_dir/test_ros_health"
 cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
+  "$repo_dir/tests/test_ros_executor_policy.c" -o "$test_dir/test_ros_executor_policy"
+"$test_dir/test_ros_executor_policy"
+cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   "$repo_dir/tests/test_uros_serial_io.c" -o "$test_dir/test_uros_serial_io"
 "$test_dir/test_uros_serial_io"
 cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
