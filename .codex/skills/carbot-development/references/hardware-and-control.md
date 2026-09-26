@@ -10,7 +10,7 @@
 
 ## Board and pins
 
-Target: ESP32-S3, 4 MB flash, DIO at 80 MHz, 115200 monitor baud.
+Target: ESP32-S3, 4 MB flash, DIO at 80 MHz. UART0 is the CP2102-backed micro-ROS link at 921600 baud; production firmware has no text monitor on that port.
 
 | Function | GPIO/configuration |
 |---|---|

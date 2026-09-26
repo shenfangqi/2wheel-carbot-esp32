@@ -27,6 +27,9 @@ cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   "$repo_dir/tests/test_ros_health.c" -o "$test_dir/test_ros_health"
 "$test_dir/test_ros_health"
 cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
+  "$repo_dir/tests/test_uros_serial_io.c" -o "$test_dir/test_uros_serial_io"
+"$test_dir/test_uros_serial_io"
+cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   "$repo_dir/tests/test_ros_watchdog.c" -o "$test_dir/test_ros_watchdog"
 "$test_dir/test_ros_watchdog"
 cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
@@ -49,4 +52,9 @@ grep -q '^uint32 consecutive_ping_failures$' "$repo_dir/extra_ros_packages/carbo
 grep -q '^uint64 session_uptime_ms$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
 grep -q '^uint64 last_time_sync_age_ms$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
 grep -q '^uint32 time_sync_fail_count$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
+grep -q '^uint8 DISCONNECT_TRANSPORT=1$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
+grep -q '^-DRMW_UXRCE_TRANSPORT=custom' <(tr -d ' "\t,' < "$repo_dir/components/micro_ros_espidf_component/colcon.meta")
+grep -q '^CONFIG_MICRO_ROS_ESP_UART_TRANSPORT=y$' "$repo_dir/sdkconfig"
+grep -q '^# CONFIG_MICRO_ROS_ESP_NETIF_WLAN is not set$' "$repo_dir/sdkconfig"
+grep -q '^CONFIG_ESP_CONSOLE_NONE=y$' "$repo_dir/sdkconfig"
 echo "host unit tests passed"

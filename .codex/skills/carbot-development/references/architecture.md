@@ -16,25 +16,21 @@
 2. Initialize status LED, buzzer, and the battery ADC task.
 3. Wait up to 1 second for a battery sample. A healthy battery produces a 120 ms beep. Voltage at or below 6.60 V enters a permanent alarm loop before the rest of the system starts.
 4. Load defaults and then NVS overrides.
-5. Start the UART0 CLI at 115200 baud.
-6. Initialize the legacy servo and apply its persisted center offset; it is not part of current chassis kinematics.
-7. Initialize IMU, differential control, command arbitration, encoders, four motor driver handles, and the M1/M3 PID task.
-8. Set shared PID gains to the values in `app_main.c`.
-9. Initialize the telemetry ring buffer.
-10. Initialize Wi-Fi STA and wait up to 15 seconds for connection/failure.
-11. Start the micro-ROS task when enabled by Kconfig.
-12. In the main loop, check runtime low voltage and collect PID/IMU telemetry every 100 ms.
-
-Because Wi-Fi initialization waits, the CLI is deliberately started before it and remains usable when networking fails.
+5. Initialize the legacy servo and apply its persisted center offset; it is not part of current chassis kinematics.
+6. Initialize IMU, differential control, command arbitration, encoders, four motor driver handles, and the M1/M3 PID task.
+7. Set shared PID gains to the values in `app_main.c`.
+8. Initialize the telemetry ring buffer.
+9. Start the micro-ROS task when enabled by Kconfig. Its framed custom transport owns UART0 at 921600 baud.
+10. In the main loop, check runtime low voltage and collect PID/IMU telemetry every 100 ms.
 
 ## Module map
 
 | Area | Main responsibility |
 |---|---|
-| `main/app_config` | Runtime config defaults, NVS namespace `carbot`, UART CLI |
+| `main/app_config` | Legacy servo offset default and NVS compatibility |
 | `main/drivers` | MCPWM motor output, PCNT encoders, servo PWM, ADC battery, LED, buzzer |
 | `main/control` | Differential/skid-steer conversion, M1/M3 speed PID, IMU heading correction, command ownership; legacy servo compatibility |
-| `main/network` | Wi-Fi STA and UDP micro-ROS address |
+| `main/network` | UART0 custom framed micro-ROS transport |
 | `main/ros_interface` | micro-ROS task, node `carbot_base`, `cmd_vel` subscriber and watchdog |
 | `main/utils` | Telemetry ring buffer and small utility headers |
 | `components/icm42670p`, `components/inv_imu`, `components/i2c_master` | Vendored/local IMU stack |
@@ -60,15 +56,13 @@ ROS cmd_vel -> subscriber -> command_mux -> differential_controller
 
 ## Configuration and concurrency
 
-Runtime config fields are `wifi_ssid`, `wifi_password`, `agent_ip`, `agent_port`, and `servo_center_offset_deg`. Defaults are defined in `app_config.c`; NVS overrides use namespace `carbot` and keys `ssid`, `pwd`, `ip`, `port`, and `servo_ofs`.
+The only runtime config field is the legacy `servo_center_offset_deg`. NVS namespace `carbot` still reads/writes `servo_ofs`; historical `ssid`, `pwd`, `ip`, and `port` keys are ignored.
 
 Active asynchronous work includes:
 
-- UART CLI task, priority 5.
 - Battery task pinned to core 1, priority 2, 100 ms period.
 - Motor PID task pinned to core 1, priority 10, 10 ms period.
 - micro-ROS task, default priority 5 and 16 KiB stack.
-- ESP-IDF Wi-Fi/event tasks.
 - Main loop telemetry sampling every 100 ms.
 
 Critical sections protect command ownership/motion block state and PID shared state. Review lock scope carefully when adding calls; do not invoke complex driver operations while holding a critical section.
@@ -78,5 +72,5 @@ Critical sections protect command ownership/motion block state and PID shared st
 - Startup low voltage: buzzer stays on, LED toggles every 200 ms, and startup does not proceed.
 - Runtime low voltage: motion is globally blocked, both tracks brake, buzzer stays on, LED toggles, and recovery requires reset/power cycle even if voltage rises. Legacy servo centering is incidental.
 - ROS watchdog: after the first received command, no new message for 500 ms stops ROS-owned track motion.
-- Wi-Fi or ROS teardown calls the ROS stop path.
+- Serial transport/session failure calls the ROS stop path.
 - Jetson manual control must publish continuously; loss of commands triggers the 500 ms watchdog. Treat the Jetson Stop control and physical power removal as separate safety layers, not as equivalent mechanisms.

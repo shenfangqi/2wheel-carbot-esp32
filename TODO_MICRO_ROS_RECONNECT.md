@@ -5,7 +5,7 @@
 当前 ESP32 端已经完成了第一阶段 micro-ROS 接入：
 
 - Jetson 通过 `ROS 2 Humble + micro-ROS Agent`
-- ESP32 通过 Wi-Fi / UDP 接入
+- ESP32 通过 CP2102 USB-UART（921600 8N1）接入
 - 板子端订阅 `cmd_vel`
 - 收到 `geometry_msgs/msg/Twist` 后驱动履带差速控制层
 
@@ -49,10 +49,7 @@ ESP32 端目标行为：
 
 ### 2. 运行期掉线检测
 
-当前 executor 循环里只基于：
-
-- Wi-Fi 是否连接
-- `spin_some()` 是否报错
+当前 executor 循环基于 custom serial transport 状态、`spin_some()`、publisher 健康状态和周期 Agent ping。
 
 已增加周期性 Agent 存活检测，待实机验收。
 
@@ -63,7 +60,7 @@ ESP32 端目标行为：
 
 目的：
 
-- 区分“Wi-Fi 还在，但 Agent 已经没了”的情况
+- 区分“UART 驱动仍打开，但 Agent 已经没了”的情况
 
 ### 3. 掉线后的资源销毁与状态回退
 
@@ -109,7 +106,7 @@ ESP32 端目标行为：
 1. Jetson 先启动，ESP32 后启动
 2. ESP32 先启动，Jetson 后启动
 3. 运行中关闭 Agent，再重启 Agent
-4. 运行中断开 Wi-Fi，再恢复 Wi-Fi
+4. 运行中拔出 CP2102 USB，再恢复 USB
 5. ROS 恢复后重新发送 `/cmd_vel`，确认可再次控制
 
 ## 验收标准

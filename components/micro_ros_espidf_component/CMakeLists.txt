@@ -1,19 +1,19 @@
-option(BUILD_ETHERNET_INTERFACE "Build ethernet interface support" OFF)
-option(BUILD_WLAN_INTERFACE "Build wlan interface support" ON)
-
 set(COMPONENT_SRC "")
+set(COMPONENT_REQUIRES "")
 
-if(BUILD_ETHERNET_INTERFACE)
+if(CONFIG_MICRO_ROS_ESP_NETIF_ENET)
     list(APPEND COMPONENT_SRC "network_interfaces/uros_ethernet_netif.c")
+    list(APPEND COMPONENT_REQUIRES esp_eth lwip)
 endif()
 
-if(BUILD_WLAN_INTERFACE)
+if(CONFIG_MICRO_ROS_ESP_NETIF_WLAN)
     list(APPEND COMPONENT_SRC "network_interfaces/uros_wlan_netif.c")
+    list(APPEND COMPONENT_REQUIRES nvs_flash esp_wifi lwip)
 endif()
 
 idf_component_register(SRCS ${COMPONENT_SRC}
                        INCLUDE_DIRS "network_interfaces"
-                       REQUIRES nvs_flash esp_wifi esp_eth lwip)
+                       REQUIRES ${COMPONENT_REQUIRES})
 
 if(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
 set(submake "make")
@@ -90,8 +90,7 @@ if(libmicroros_ret AND NOT libmicroros_ret EQUAL 0)
   message(FATAL_ERROR "FAILED: ${libmicroros_ret}")
 endif()
 
-add_prebuilt_library(libmicroros-prebuilt ""
-                     REQUIRES lwip)
+add_prebuilt_library(libmicroros-prebuilt "")
 
 add_dependencies(libmicroros-prebuilt libmicroros_project)
 

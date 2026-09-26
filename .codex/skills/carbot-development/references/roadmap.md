@@ -10,9 +10,9 @@
 ## Current capabilities
 
 - ESP-IDF 5.4.4 ESP32-S3 firmware builds successfully.
-- Wi-Fi STA configuration persists through a UART CLI.
+- UART0 is dedicated to framed micro-ROS traffic at 921600; production console and CLI are disabled.
 - Motion commands enter only through micro-ROS `/cmd_vel`; the ESP32 exposes no HTTP service.
-- ROS 2 `cmd_vel` reaches differential control over micro-ROS UDP.
+- ROS 2 `cmd_vel` reaches differential control over CP2102 USB-UART micro-ROS.
 - M1/M3 encoder feedback drives a shared-gain 100 Hz speed PID.
 - A 500 ms ROS watchdog stops stale commands; status values remain `NONE=0`, `ROS=2`.
 - Battery voltage monitoring provides latched startup/runtime alarm behavior.
@@ -22,7 +22,7 @@
 
 Re-read the named TODO and current implementation before acting:
 
-- `TODO_MICRO_ROS_RECONNECT.md`: validate device-first startup, Agent restart, Wi-Fi recovery, cleanup, and ROS command recovery. Parts of the retry state machine now exist, so update the TODO with evidence instead of assuming every item is absent.
+- `TODO_MICRO_ROS_RECONNECT.md`: validate device-first startup, Agent restart, USB reconnect, cleanup, and ROS command recovery. Parts of the retry state machine now exist, so update the TODO with evidence instead of assuming every item is absent.
 - `TODO_MOTOR_TUNING.md`: replace raw PWM-tick semantics/dead-zone behavior with clearer, smoother control.
 - `TODO_PID.md`: add runtime tuning, per-wheel gains, abnormal feedback/stall protection, controlled logging, and longer tests. Some statements refer to older `diff_drive_*` code and are stale.
 - `TODO_STRAIGHT_LINE_AND_IMU.md`: mechanically calibrate first, then consider a forward-straight gyro outer loop and, if needed, independent wheel tuning.
@@ -30,11 +30,11 @@ Re-read the named TODO and current implementation before acting:
 Additional architectural gaps visible in current source:
 
 - No active odometry pipeline or ROS publisher.
-- `safety_manager.*` and `odometry_estimator.*` are not built.
+- Odometry messages are not published even though wheel tick estimation is active.
 - No physical or hard real-time remote-stop guarantee; Jetson UI Stop remains a software control.
 - Battery alarm does not recover without reset.
 - Logging/telemetry controls are not runtime configurable.
-- No automated host-side tests or hardware-in-the-loop harness.
+- Host-side unit tests exist, but there is no hardware-in-the-loop harness.
 
 ## Recommended sequence
 
@@ -48,4 +48,4 @@ Additional architectural gaps visible in current source:
 
 ## Documentation hygiene
 
-Whenever behavior changes, update the closest user document and this skill reference in the same change. Mark hardware claims as one of: implemented, bench-tested with raised wheels, ground-tested, or unverified. Keep commands copyable, never commit real Wi-Fi credentials, and remove historical claims that no longer match source.
+Whenever behavior changes, update the closest user document and this skill reference in the same change. Mark hardware claims as one of: implemented, bench-tested with raised wheels, ground-tested, or unverified. Keep commands copyable and remove historical claims that no longer match source.

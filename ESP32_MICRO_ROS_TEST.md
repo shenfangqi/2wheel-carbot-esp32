@@ -29,7 +29,7 @@
 
 1. ESP32 先启动、Agent 后启动，确认无需重启 ESP32 即可出现 node 和 topics。
 2. 运动中关闭 Agent，确认 ROS 所属运动立即停止；重启 Agent 后实体自动重建。
-3. 断开并恢复 Wi-Fi，确认自动重建且 `/carbot/status.reconnect_count` 增加。
+3. 重新插拔 CP2102 USB，确认无需重启 Jetson 就能自动重建，且 `/carbot/status.reconnect_count` 增加。
 4. 每次重连确认 `time_synchronized=true`；对比消息 `header.stamp` 与 Jetson 当前
    ROS 时间，并记录测试期间最大偏差。
 5. ESP32 重启后确认 `boot_id` 改变，Jetson 重置轮计数增量基准且不产生里程计跳变。
@@ -40,3 +40,5 @@
   实机通过。
 - 低压保护、启动停车、前进/后退、原地转向和 ROS 命令控制均无回归。
 - ESP32 的 TCP 80 未监听，且不存在 HTTP 运动 endpoint。
+- UART0 采集中没有可见的启动日志或 CLI 文本，只有 XRCE framing。
+- `/wheel_ticks` 和 `/imu/data_raw` 约 50 Hz 持续 30 分钟，且 50 次 Agent restart/USB reconnect 无死锁或持续错误。
