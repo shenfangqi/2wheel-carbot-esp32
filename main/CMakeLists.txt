@@ -8,7 +8,6 @@ idf_component_register(
 
         "network/wifi_manager.c"
         "network/uros_transport.c"
-        "network/web_server.c"
 
         "drivers/servo_driver.c"
         "drivers/motor_driver.c"
@@ -52,5 +51,4 @@ idf_component_register(
 		    esp_driver_uart
             esp_driver_mcpwm
             micro_ros_espidf_component
-        esp_http_server
 )

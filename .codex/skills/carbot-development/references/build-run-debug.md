@@ -4,7 +4,7 @@
 
 - Build and flash
 - First boot and CLI
-- Web control and telemetry
+- Motion control and telemetry
 - micro-ROS host workflow
 - Troubleshooting ladder
 - Verification matrix
@@ -48,27 +48,11 @@ reboot
 
 Values cannot contain spaces. `show` prints the Wi-Fi password in clear text; do not paste its output into tickets or commits. `set` changes RAM only until `save`; networking uses values loaded at boot, so save and reboot after changes. `show` also prints `local_ip`, which is empty until DHCP succeeds.
 
-## Web control and telemetry
+## Motion control and telemetry
 
-After Wi-Fi gets an address, open `http://<local_ip>/`. Port 80 exposes:
-
-| Endpoint | Purpose |
-|---|---|
-| `/` | Touch control page |
-| `/cmd?move=forward|backward|left|right|center|stop` | Manual command API |
-| `/cmd?move=center_offset_inc|center_offset_dec` | Adjust and persist servo center by 1 degree |
-| `/servo/offset` | Current center offset |
-| `/telemetry` | CSV telemetry export |
-| `/telemetry/reset` | Clear telemetry buffer |
-
-Example non-motion checks:
-
-```bash
-curl "http://<local_ip>/servo/offset"
-curl "http://<local_ip>/telemetry" -o carbot-telemetry.csv
-```
-
-Motion endpoints execute immediately. Do not invoke them during automated smoke tests or with the car resting on its wheels.
+The ESP32 does not run an HTTP server; TCP port 80 should be closed. Manual control is hosted
+on Jetson and must be converted to a continuous `/cmd_vel` stream. The firmware keeps its
+internal telemetry buffer and publishes wheel ticks, IMU, battery, and status over ROS.
 
 ## micro-ROS host workflow
 
@@ -115,7 +99,7 @@ The firmware retry/cleanup loop should retry support initialization while Wi-Fi 
 3. Boot: capture from `=== CARBOT START ===`; check reset reason, battery voltage/alarm, and the last milestone printed.
 4. CLI: confirm UART0/115200 and press Enter. Startup logs and CLI share the port.
 5. Wi-Fi: use `show`; verify 2.4 GHz, WPA2-compatible credentials, DHCP, and nonempty `local_ip`. Firmware retries only ten disconnect events before setting failure.
-6. Web: ping/open the IP from a device on the same network, then query `/servo/offset` before any motion endpoint.
+6. Network surface: verify the ESP32 has no TCP listener on port 80; Wi-Fi remains required for micro-ROS UDP.
 7. Agent: verify UDP port, host firewall/routing, Agent bind output, `ROS_DOMAIN_ID=0`, and that Agent starts before the device.
 8. ROS: inspect node/topic/type and Agent output. A single command expires after 500 ms by design.
 9. Motion: compare telemetry target, actual RPM, and PWM. Target with zero actual suggests encoder/mechanical trouble; large PWM with low actual suggests load, dead zone, battery, wiring, or stall.
@@ -131,11 +115,9 @@ Select relevant rows for each change and record actual evidence:
 | Healthy boot | Short beep, no alarm loop, initialization milestones complete |
 | Low battery | Motor blocked/braked, servo centered, buzzer on, LED blinking |
 | Wi-Fi absent | CLI remains available; no motion starts |
-| Web press/release | Direction acts only while intended; release stops/centers |
-| Servo offset | Changes by 1 degree, persists after reboot, remains within ±30 |
+| Jetson manual control | Publishes `/cmd_vel` at 10 Hz; release/stop publishes zero or lets watchdog expire |
 | ROS single message | Motion begins and stops/centers after about 500 ms |
-| Web after ROS | Web takes ownership; later ROS timeout does not stop Web motion |
 | Agent/Wi-Fi loss | ROS-owned motion stops and centers |
-| Telemetry | Signs and magnitudes match commanded direction and hardware movement |
+| ROS telemetry | Wheel, IMU, battery, and status topics remain available |
 
 Do not claim Agent recovery, battery cutoff accuracy, track calibration, or PID stability without real hardware observations.

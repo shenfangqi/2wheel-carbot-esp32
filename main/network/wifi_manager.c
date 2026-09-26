@@ -12,7 +12,6 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "esp_netif.h"
-#include "network/web_server.h"
 
 static const char *TAG = "wifi_manager";
 
@@ -49,7 +48,6 @@ static void wifi_event_handler(void *arg,
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
 
-        web_server_start();
     }
 }
 

@@ -1,6 +1,6 @@
 # Carbot ESP32-S3 固件
 
-Carbot 是基于 ESP-IDF 5.4.4 的 ESP32-S3 履带式差速小车固件，包含左右履带速度闭环、差速/滑移转向、Wi-Fi 网页控制、micro-ROS `/cmd_vel`、IMU 航向修正以及电池低压保护。舵机相关代码和接口属于旧底盘兼容项，不再参与当前底盘的运动学转向。
+Carbot 是基于 ESP-IDF 5.4.4 的 ESP32-S3 履带式差速小车固件，包含左右履带速度闭环、差速/滑移转向、Wi-Fi micro-ROS `/cmd_vel`、IMU 航向修正以及电池低压保护。舵机相关代码属于旧底盘兼容项，不再参与当前底盘的运动学转向。
 
 ## 目录
 
@@ -8,7 +8,7 @@ Carbot 是基于 ESP-IDF 5.4.4 的 ESP32-S3 履带式差速小车固件，包含
 - [环境与编译](#环境与编译)
 - [烧录与串口监控](#烧录与串口监控)
 - [首次启动与设备配置](#首次启动与设备配置)
-- [网页控制与遥测](#网页控制与遥测)
+- [运动控制与遥测](#运动控制与遥测)
 - [micro-ROS 启动与验证](#micro-ros-启动与验证)
 - [调试与故障定位](#调试与故障定位)
 - [开发说明](#开发说明)
@@ -16,7 +16,7 @@ Carbot 是基于 ESP-IDF 5.4.4 的 ESP32-S3 履带式差速小车固件，包含
 ## 安全须知
 
 - 首次烧录、修改电机、差速参数或 PID 后，把履带架空再测试。
-- 保证可以立即断开电机电源，不要把网页或 ROS 停车当成唯一急停手段。
+- 保证可以立即断开电机电源，不要把 Jetson 页面或 ROS 停车当成物理急停。
 - 运动测试前确认履带、传动件和线束不会卡住。
 - 启动时持续蜂鸣且 LED 快速闪烁表示电池低压告警。先用万用表检查电池和采样电路，不要直接绕过保护。
 - 串口 `show` 会明文显示 Wi-Fi 密码，不要把输出粘贴到公开日志或提交中。
@@ -140,37 +140,16 @@ reboot
 - 使用 2.4 GHz、WPA2 兼容网络；ESP32-S3 不能连接仅 5 GHz 热点。
 - `show` 中 `local_ip` 为空说明还没有获得 DHCP 地址。
 
-## 网页控制与遥测
+## 运动控制与遥测
 
-设备获得 IP 后，在同一网络的浏览器打开：
+ESP32 不提供 HTTP 服务或运动 API。手机手动操作由 Jetson 页面转换为持续发布的
+`/cmd_vel`，与导航命令一样经 micro-ROS 进入固件。Jetson 应以高于 2 Hz 的频率持续
+发布，建议 10 Hz；停止发布后 ESP32 的 500 ms watchdog 会停车。Jetson 页面 Stop
+不是物理急停。
 
-```text
-http://<local_ip>/
-```
-
-网页提供前进、后退、左右差速转向、停止、遗留舵机中心偏置和遥测入口。手动控制当前使用固定线速度 `0.40 m/s`、角速度 `2.0 rad/s`；左右转向由两侧履带速度差实现，舵机不是转向源。
-
-HTTP 接口：
-
-| 地址 | 功能 |
-|---|---|
-| `/` | 控制页面 |
-| `/cmd?move=forward`、`backward`、`left`、`right`、`center`、`stop` | 控制命令 |
-| `/cmd?move=center_offset_inc`、`center_offset_dec` | 遗留舵机中心每次调整 1°并写入 NVS；不影响差速转向 |
-| `/servo/offset` | 遗留舵机中心偏置；不作为运动学输入 |
-| `/telemetry` | CSV 遥测 |
-| `/telemetry/reset` | 清空遥测缓存 |
-
-无运动风险的检查：
-
-```bash
-curl "http://<local_ip>/servo/offset"
-curl "http://<local_ip>/telemetry" -o carbot-telemetry.csv
-```
-
-不要用自动化脚本随意请求运动接口；命令收到后会立即驱动车辆。
-
-遥测 CSV 包含 M1/M3 目标 RPM、实际 RPM、PWM、陀螺仪 Z 轴和 IMU 状态。调试速度闭环时先看：
+内部 telemetry buffer 仍用于固件诊断，但不再通过 HTTP 导出。运行期遥测由 ROS
+topics `/wheel_ticks`、`/imu/data_raw`、`/battery_state` 和 `/carbot/status` 发布。
+调试速度闭环时可结合串口诊断和 ROS 遥测检查：
 
 - 有目标、实际始终为 0：检查编码器、机械卡滞和方向映射。
 - PWM 很大但实际速度很低：检查电池、负载、死区、接线或堵转。
@@ -254,14 +233,14 @@ ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist \
 4. **电池**：持续蜂鸣/闪灯时用万用表对照串口电压，检查 GPIO3 分压采样。
 5. **CLI**：确认 UART0、115200，按 Enter 查看提示符。
 6. **Wi-Fi**：用 `show` 检查配置和 `local_ip`，确认 2.4 GHz、密码、DHCP 和同网段。
-7. **网页**：先请求无运动风险的 `/servo/offset`，再在架空车轮条件下测控制。
+7. **TCP 80**：确认 ESP32 地址没有监听 HTTP；页面服务应运行在 Jetson，而不是固件上。
 8. **Agent**：检查 UDP 8888、主机防火墙/路由、Agent 输出和 Domain ID。
 9. **ROS**：检查 node、topic、消息类型；记住单条消息 500 ms 后超时是预期行为。
-10. **运动控制**：导出 `/telemetry`，对照目标 RPM、实际 RPM、PWM、方向和 IMU。
+10. **运动控制**：结合 ROS topics 和串口诊断，对照目标、反馈、方向和 IMU。
 
 需要看到 `ESP_LOGI/W` 时，可暂时把 `app_main.c` 中全局日志等级从 `ESP_LOG_ERROR` 提高，定位后再决定是否保留。不要把增加日志与实际修复混为一谈。
 
-每次硬件相关改动至少验证相关场景：健康启动、停车、前进/倒退、转向、Web/ROS 切换、通信丢失、低压保护。明确记录哪些只编译通过，哪些完成架空测试或地面测试。
+每次硬件相关改动至少验证相关场景：健康启动、停车、前进/倒退、转向、ROS 命令、通信丢失、低压保护。明确记录哪些只编译通过，哪些完成架空测试或地面测试。
 
 ## 开发说明
 
@@ -271,7 +250,7 @@ ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist \
 |---|---|
 | `main/drivers` | GPIO、PWM、PCNT、ADC 等硬件访问 |
 | `main/control` | 差速/滑移转向、PID、IMU 航向修正、命令仲裁与安全；舵机代码仅作遗留兼容 |
-| `main/network` | Wi-Fi、HTTP、micro-ROS UDP 地址 |
+| `main/network` | Wi-Fi STA 和 micro-ROS UDP 地址 |
 | `main/ros_interface` | ROS node、topic、callback、生命周期和超时 |
 | `main/app_config` | 默认配置、NVS 和串口 CLI |
 

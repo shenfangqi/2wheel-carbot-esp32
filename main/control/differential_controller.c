@@ -23,7 +23,7 @@ static const float DIFFERENTIAL_MAX_WHEEL_RPM = 250.0f;
 // Ground tests bracketed the neutral point near 1.0. Apply the currently
 // selected 0.05% correction without changing calibrated turning commands.
 static const float DIFFERENTIAL_STRAIGHT_RIGHT_TRIM = 1.0005f;
-/* Keep ordinary Web/cmd_vel driving independent of IMU bias. Heading-assisted
+/* Keep ordinary cmd_vel driving independent of IMU bias. Heading-assisted
  * calibration remains available through the explicit CLI test. */
 static const bool DIFFERENTIAL_ENABLE_AUTOMATIC_HEADING_HOLD = false;
 static const float DIFFERENTIAL_HEADING_KP = 1.5f;
@@ -205,7 +205,7 @@ void differential_controller_set_cmd(float linear_mps, float angular_rps)
     portEXIT_CRITICAL(&s_differential_lock);
 
     /* A zero command is safety-critical and must not wait for/ramp through the
-     * periodic limiter. This is also the Web steering-release path. */
+     * periodic limiter. */
     if (differential_command_is_stopped(linear_mps, angular_rps)) {
         motor_pid_controller_stop(true);
     }

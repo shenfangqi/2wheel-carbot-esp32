@@ -11,10 +11,10 @@
 
 - ESP-IDF 5.4.4 ESP32-S3 firmware builds successfully.
 - Wi-Fi STA configuration persists through a UART CLI.
-- An HTTP touch UI provides forward/reverse/differential-turn/stop, legacy servo-center calibration, and CSV telemetry.
+- Motion commands enter only through micro-ROS `/cmd_vel`; the ESP32 exposes no HTTP service.
 - ROS 2 `cmd_vel` reaches differential control over micro-ROS UDP.
 - M1/M3 encoder feedback drives a shared-gain 100 Hz speed PID.
-- A 500 ms ROS watchdog and command-source ownership reduce stale-command hazards.
+- A 500 ms ROS watchdog stops stale commands; status values remain `NONE=0`, `ROS=2`.
 - Battery voltage monitoring provides latched startup/runtime alarm behavior.
 - ICM42670P gyro data is captured in telemetry when ready.
 
@@ -22,7 +22,7 @@
 
 Re-read the named TODO and current implementation before acting:
 
-- `TODO_MICRO_ROS_RECONNECT.md`: validate device-first startup, Agent restart, Wi-Fi recovery, cleanup, and Web/ROS interaction. Parts of the retry state machine now exist, so update the TODO with evidence instead of assuming every item is absent.
+- `TODO_MICRO_ROS_RECONNECT.md`: validate device-first startup, Agent restart, Wi-Fi recovery, cleanup, and ROS command recovery. Parts of the retry state machine now exist, so update the TODO with evidence instead of assuming every item is absent.
 - `TODO_MOTOR_TUNING.md`: replace raw PWM-tick semantics/dead-zone behavior with clearer, smoother control.
 - `TODO_PID.md`: add runtime tuning, per-wheel gains, abnormal feedback/stall protection, controlled logging, and longer tests. Some statements refer to older `diff_drive_*` code and are stale.
 - `TODO_STRAIGHT_LINE_AND_IMU.md`: mechanically calibrate first, then consider a forward-straight gyro outer loop and, if needed, independent wheel tuning.
@@ -31,7 +31,7 @@ Additional architectural gaps visible in current source:
 
 - No active odometry pipeline or ROS publisher.
 - `safety_manager.*` and `odometry_estimator.*` are not built.
-- No authenticated Web API and no hard real-time remote-stop guarantee.
+- No physical or hard real-time remote-stop guarantee; Jetson UI Stop remains a software control.
 - Battery alarm does not recover without reset.
 - Logging/telemetry controls are not runtime configurable.
 - No automated host-side tests or hardware-in-the-loop harness.

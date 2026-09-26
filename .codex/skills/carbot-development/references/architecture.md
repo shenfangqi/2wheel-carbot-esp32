@@ -21,7 +21,7 @@
 7. Initialize IMU, differential control, command arbitration, encoders, four motor driver handles, and the M1/M3 PID task.
 8. Set shared PID gains to the values in `app_main.c`.
 9. Initialize the telemetry ring buffer.
-10. Initialize Wi-Fi STA and wait up to 15 seconds for connection/failure. The HTTP server starts on receipt of an IP address.
+10. Initialize Wi-Fi STA and wait up to 15 seconds for connection/failure.
 11. Start the micro-ROS task when enabled by Kconfig.
 12. In the main loop, check runtime low voltage and collect PID/IMU telemetry every 100 ms.
 
@@ -34,7 +34,7 @@ Because Wi-Fi initialization waits, the CLI is deliberately started before it an
 | `main/app_config` | Runtime config defaults, NVS namespace `carbot`, UART CLI |
 | `main/drivers` | MCPWM motor output, PCNT encoders, servo PWM, ADC battery, LED, buzzer |
 | `main/control` | Differential/skid-steer conversion, M1/M3 speed PID, IMU heading correction, command ownership; legacy servo compatibility |
-| `main/network` | Wi-Fi STA, HTTP server, UDP micro-ROS address |
+| `main/network` | Wi-Fi STA and UDP micro-ROS address |
 | `main/ros_interface` | micro-ROS task, node `carbot_base`, `cmd_vel` subscriber and watchdog |
 | `main/utils` | Telemetry ring buffer and small utility headers |
 | `components/icm42670p`, `components/inv_imu`, `components/i2c_master` | Vendored/local IMU stack |
@@ -45,8 +45,6 @@ Because Wi-Fi initialization waits, the CLI is deliberately started before it an
 ## Command and data flow
 
 ```text
-Web /cmd --------------------+
-                             v
 ROS cmd_vel -> subscriber -> command_mux -> differential_controller
                                             |              |
                                             v              v
@@ -56,11 +54,9 @@ ROS cmd_vel -> subscriber -> command_mux -> differential_controller
                                   encoder   motor PWM
 ```
 
-- Web commands use `0.40 m/s` and `2.0 rad/s` fixed magnitudes; turning is produced by left/right track speed difference.
 - ROS subscribes to relative topic `cmd_vel`. With the default empty namespace, the effective topic is `/cmd_vel`.
-- `command_mux` tracks only the latest source. A Web command can take ownership after ROS and vice versa.
-- `command_mux_stop_ros()` acts only if ROS still owns motion. This prevents a delayed ROS timeout from stopping a later Web command.
-- `command_mux_stop_web()` sets Web as active and stops immediately.
+- `command_mux` accepts only ROS motion commands. Its published source values remain wire-compatible: `NONE=0`, `ROS=2`.
+- `command_mux_stop_ros()` acts only if ROS owns motion and then clears ownership.
 
 ## Configuration and concurrency
 
@@ -72,7 +68,7 @@ Active asynchronous work includes:
 - Battery task pinned to core 1, priority 2, 100 ms period.
 - Motor PID task pinned to core 1, priority 10, 10 ms period.
 - micro-ROS task, default priority 5 and 16 KiB stack.
-- ESP-IDF Wi-Fi/event and HTTP server tasks.
+- ESP-IDF Wi-Fi/event tasks.
 - Main loop telemetry sampling every 100 ms.
 
 Critical sections protect command ownership/motion block state and PID shared state. Review lock scope carefully when adding calls; do not invoke complex driver operations while holding a critical section.
@@ -83,4 +79,4 @@ Critical sections protect command ownership/motion block state and PID shared st
 - Runtime low voltage: motion is globally blocked, both tracks brake, buzzer stays on, LED toggles, and recovery requires reset/power cycle even if voltage rises. Legacy servo centering is incidental.
 - ROS watchdog: after the first received command, no new message for 500 ms stops ROS-owned track motion.
 - Wi-Fi or ROS teardown calls the ROS stop path.
-- Web pointer release sends stop, but network loss can prevent the release request from arriving; treat the red stop button and physical power removal as safety layers, not proof of a hard real-time remote stop.
+- Jetson manual control must publish continuously; loss of commands triggers the 500 ms watchdog. Treat the Jetson Stop control and physical power removal as separate safety layers, not as equivalent mechanisms.

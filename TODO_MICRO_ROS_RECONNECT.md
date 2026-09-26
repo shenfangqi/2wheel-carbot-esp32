@@ -92,17 +92,15 @@ ESP32 端目标行为：
 当前已经有：
 
 - `cmd_vel timeout` 停车
-- ROS stop 只影响 ROS source
+- ROS stop 清除当前 ROS source
 
 后续需要明确保证：
 
 - Agent 掉线时一定停止 ROS 所属的左右履带目标（当前接口为 `command_mux_stop_ros(true)`，其中 `true` 只会附带回中遗留舵机）
-- 不影响网页手动控制逻辑
 
 目的：
 
 - ROS 失联时车必须安全
-- 同时保留网页控制独立性
 
 ### 5. Host 晚启动联调验证
 
@@ -112,7 +110,7 @@ ESP32 端目标行为：
 2. ESP32 先启动，Jetson 后启动
 3. 运行中关闭 Agent，再重启 Agent
 4. 运行中断开 Wi-Fi，再恢复 Wi-Fi
-5. 网页控制正在使用时，ROS 连接恢复
+5. ROS 恢复后重新发送 `/cmd_vel`，确认可再次控制
 
 ## 验收标准
 
@@ -121,7 +119,7 @@ ESP32 端目标行为：
 - ESP32 先启动时，Jetson 后启动 Agent，板子能自动恢复并接收 `/cmd_vel`
 - Agent 中途退出后，小车自动停止两侧履带
 - Agent 恢复后，不重启板子也能再次接收 `/cmd_vel`
-- 网页控制逻辑不被 ROS 重连机制破坏
+- ESP32 TCP 80 保持关闭，重连逻辑不引入新的网络控制入口
 - 编译通过，固件可刷写，实机联调通过
 
 ## 备注
