@@ -100,7 +100,7 @@ CARBOT 真机信息快照（用于 Isaac Sim 适配）
 [SOURCE] FreeRTOS tick            100 Hz
 [SOURCE] 全局日志级别              ESP_LOG_ERROR
 [SOURCE] 配置持久化                NVS namespace "carbot"
-[SOURCE] 网络                      2.4 GHz Wi-Fi + HTTP + micro-ROS UDP
+[SOURCE] 网络                      2.4 GHz Wi-Fi + micro-ROS UDP
 
 
 四、驱动、电机、PWM 与编码器
@@ -222,14 +222,11 @@ TF/odom：当前固件不发布 TF，也不直接发布 nav_msgs/Odometry；上�
 作为权威轮式里程计输入并自行积分/融合 IMU。避免同时从履带可视关节再积分第二套 odom。
 
 
-九、网页与控制仲裁
+九、运动命令入口
 ------------------------------------------------------------
-[SOURCE] HTTP                     port 80
-[LIVE] base URL                  http://192.168.1.116/
-[SOURCE] manual command           forward/backward = +/-0.40 m/s；left/right = +/-2.0 rad/s
-[SOURCE] endpoints                /, /cmd, /servo/offset, /telemetry, /telemetry/reset
-[SOURCE] command sources          Web 与 ROS 仲裁；ROS cmd_vel 过期只停止 ROS 所有权运动，
-                                  不应意外取消当前 Web 所有权。
+[SOURCE] HTTP                     未提供；TCP 80 不应监听
+[SOURCE] command source           仅 micro-ROS /cmd_vel；状态协议保持 NONE=0、ROS=2
+[SOURCE] manual command path      Jetson 页面持续发布 /cmd_vel（建议 10 Hz）
 
 
 十、Isaac Sim 仍缺少的机械/物理参数（必须补测，不能猜）

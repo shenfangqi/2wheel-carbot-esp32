@@ -1,5 +1,6 @@
 #include "ros_interface/ros_publishers.h"
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <math.h>
 #include <string.h>
@@ -72,8 +73,10 @@ static void ros_publishers_timer_callback(rcl_timer_t *timer, int64_t last_call_
     ros_time_stamp_from_device_us(snapshot.device_stamp_us, &s_wheel_ticks_last_stamp_ns,
                                   &s_wheel_ticks_msg.header.stamp);
 
-    if (rcl_publish(&s_wheel_ticks_publisher, &s_wheel_ticks_msg, NULL) != RCL_RET_OK) {
-        ESP_LOGE(TAG, "wheel ticks publish failed");
+    rcl_ret_t publish_result =
+        rcl_publish(&s_wheel_ticks_publisher, &s_wheel_ticks_msg, NULL);
+    if (publish_result != RCL_RET_OK) {
+        ESP_LOGE(TAG, "wheel ticks publish failed: %d", (int)publish_result);
         s_healthy = false;
         return;
     }
@@ -91,8 +94,9 @@ static void ros_publishers_timer_callback(rcl_timer_t *timer, int64_t last_call_
         s_imu_msg.linear_acceleration.x = acceleration_m_s2[0];
         s_imu_msg.linear_acceleration.y = acceleration_m_s2[1];
         s_imu_msg.linear_acceleration.z = acceleration_m_s2[2];
-        if (rcl_publish(&s_imu_publisher, &s_imu_msg, NULL) != RCL_RET_OK) {
-            ESP_LOGE(TAG, "IMU publish failed");
+        publish_result = rcl_publish(&s_imu_publisher, &s_imu_msg, NULL);
+        if (publish_result != RCL_RET_OK) {
+            ESP_LOGE(TAG, "IMU publish failed: %d", (int)publish_result);
             s_healthy = false;
             return;
         }
@@ -103,8 +107,9 @@ static void ros_publishers_timer_callback(rcl_timer_t *timer, int64_t last_call_
         ros_time_stamp_from_device_us(snapshot.device_stamp_us, &s_battery_last_stamp_ns,
                                       &s_battery_msg.header.stamp);
         s_battery_msg.voltage = battery_monitor_get_voltage();
-        if (rcl_publish(&s_battery_publisher, &s_battery_msg, NULL) != RCL_RET_OK) {
-            ESP_LOGE(TAG, "battery publish failed");
+        publish_result = rcl_publish(&s_battery_publisher, &s_battery_msg, NULL);
+        if (publish_result != RCL_RET_OK) {
+            ESP_LOGE(TAG, "battery publish failed: %d", (int)publish_result);
             s_healthy = false;
             return;
         }
@@ -128,9 +133,15 @@ static void ros_publishers_timer_callback(rcl_timer_t *timer, int64_t last_call_
         s_status_msg.clock_offset_ns = ros_time_get_offset_ns();
         s_status_msg.last_time_sync_age_ms = ros_time_get_last_sync_age_ms();
         s_status_msg.time_sync_fail_count = ros_time_get_sync_fail_count();
-        if (rcl_publish(&s_status_publisher, &s_status_msg, NULL) != RCL_RET_OK) {
-            ESP_LOGE(TAG, "status publish failed");
+        publish_result = rcl_publish(&s_status_publisher, &s_status_msg, NULL);
+        if (publish_result != RCL_RET_OK) {
+            ESP_LOGE(TAG, "status publish failed: %d", (int)publish_result);
             s_healthy = false;
+        }
+
+        if ((s_status_sequence % 10) == 0) {
+            ESP_LOGI(TAG, "publish heartbeat: fast_cycle=%" PRIu32 " status_sequence=%" PRIu64,
+                     s_publish_cycle, s_status_sequence);
         }
     }
 }

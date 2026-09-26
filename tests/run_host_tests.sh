@@ -11,6 +11,9 @@ cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   "$repo_dir/tests/test_safety_manager.c" "$repo_dir/main/control/safety_manager.c" \
   -o "$test_dir/test_safety_manager"
 "$test_dir/test_safety_manager"
+cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
+  "$repo_dir/tests/test_command_source_values.c" -o "$test_dir/test_command_source_values"
+"$test_dir/test_command_source_values"
 cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/components/icm42670p" \
   "$repo_dir/tests/test_imu_units.c" -o "$test_dir/test_imu_units"
 "$test_dir/test_imu_units"
@@ -23,6 +26,12 @@ cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
 cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   "$repo_dir/tests/test_ros_health.c" -o "$test_dir/test_ros_health"
 "$test_dir/test_ros_health"
+cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
+  "$repo_dir/tests/test_ros_executor_policy.c" -o "$test_dir/test_ros_executor_policy"
+"$test_dir/test_ros_executor_policy"
+cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
+  "$repo_dir/tests/test_uros_serial_io.c" -o "$test_dir/test_uros_serial_io"
+"$test_dir/test_uros_serial_io"
 cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   "$repo_dir/tests/test_ros_watchdog.c" -o "$test_dir/test_ros_watchdog"
 "$test_dir/test_ros_watchdog"
@@ -46,4 +55,9 @@ grep -q '^uint32 consecutive_ping_failures$' "$repo_dir/extra_ros_packages/carbo
 grep -q '^uint64 session_uptime_ms$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
 grep -q '^uint64 last_time_sync_age_ms$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
 grep -q '^uint32 time_sync_fail_count$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
+grep -q '^uint8 DISCONNECT_TRANSPORT=1$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/CarbotStatus.msg"
+grep -q '^-DRMW_UXRCE_TRANSPORT=custom' <(tr -d ' "\t,' < "$repo_dir/components/micro_ros_espidf_component/colcon.meta")
+grep -q '^CONFIG_MICRO_ROS_ESP_UART_TRANSPORT=y$' "$repo_dir/sdkconfig"
+grep -q '^# CONFIG_MICRO_ROS_ESP_NETIF_WLAN is not set$' "$repo_dir/sdkconfig"
+grep -q '^CONFIG_ESP_CONSOLE_NONE=y$' "$repo_dir/sdkconfig"
 echo "host unit tests passed"

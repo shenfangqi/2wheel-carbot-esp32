@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
@@ -6,8 +5,6 @@
 #include "esp_sleep.h"
 
 #include "app_config/app_config.h"
-#include "app_config/usb_config_cli.h"
-#include "network/wifi_manager.h"
 #include "control/differential_controller.h"
 #include "control/command_mux.h"
 #include "control/motor_pid_controller.h"
@@ -35,9 +32,6 @@ static void app_enter_low_voltage_alarm(float voltage, const char *phase, bool s
         phase,
         voltage,
         BATTERY_LOW_VOLTAGE_ENTER_V);
-    printf("%s battery low, alarming for %d ms before deep sleep\n",
-           phase,
-           LOW_VOLTAGE_ALARM_DURATION_MS);
 
     if (stop_motion) {
         command_mux_set_motion_blocked(true);
@@ -61,8 +55,6 @@ static void app_enter_low_voltage_alarm(float voltage, const char *phase, bool s
         motor_pid_controller_stop(false);
     }
 
-    printf("battery protection entering deep sleep; power-cycle after charging\n");
-    fflush(stdout);
     ESP_ERROR_CHECK(esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL));
     esp_deep_sleep_start();
 }
@@ -75,7 +67,6 @@ static void app_handle_startup_low_voltage(void)
     }
 
     const float startup_voltage = battery_monitor_get_voltage();
-    printf("battery voltage at startup: %.2fV\n", startup_voltage);
 
     if (!battery_monitor_is_low()) {
         buzzer_on();
@@ -138,8 +129,9 @@ void app_main(void)
 
     nvs_flash_init();
     esp_log_level_set("*", ESP_LOG_ERROR);
-
-    printf("=== CARBOT START ===\n");
+    esp_log_level_set("uros_transport", ESP_LOG_INFO);
+    esp_log_level_set("ros_executor", ESP_LOG_INFO);
+    esp_log_level_set("ros_publishers", ESP_LOG_INFO);
 
     status_led_init();
     buzzer_init();
@@ -148,35 +140,20 @@ void app_main(void)
 
     app_config_init();
     config = app_config_get();
-    printf("config init ok\n");
-
-    usb_cli_start();
-    printf("cli start ok\n");
 
     servo_controller_init();
     servo_controller_set_center_offset(config->servo_center_offset_deg);
     servo_controller_center();
-    printf("servo init ok\n");
 
     Icm42670p_Init();
-    printf("imu init start\n");
 
     differential_controller_init();
-    printf("differential controller init ok\n");
     command_mux_init();
-    printf("command mux init ok\n");
     motor_pid_controller_set_pid(0.8f, 0.15f, 0.0f);
-    printf("motor pid init ok\n");
     odometry_estimator_init();
-    printf("odometry estimator init ok\n");
     telemetry_buffer_init();
-    printf("telemetry buffer init ok\n");
-
-    wifi_manager_init();
-    printf("wifi manager init ok\n");
 
     ros_executor_start();
-    printf("ros executor init ok\n");
 
     while (1) {
         if (battery_monitor_is_low()) {

@@ -9,13 +9,11 @@ extern "C" {
 
 typedef enum {
     COMMAND_SOURCE_NONE = 0,
-    COMMAND_SOURCE_WEB,
-    COMMAND_SOURCE_ROS,
+    /* Value 1 was the removed Web source; keep the status wire protocol stable. */
+    COMMAND_SOURCE_ROS = 2,
 } command_source_t;
 
 void command_mux_init(void);
-void command_mux_apply_web_cmd(float linear_mps, float angular_rps);
-void command_mux_stop_web(bool center_steering);
 void command_mux_apply_ros_cmd(float linear_mps, float angular_rps);
 void command_mux_stop_ros(bool center_steering);
 command_source_t command_mux_get_active_source(void);

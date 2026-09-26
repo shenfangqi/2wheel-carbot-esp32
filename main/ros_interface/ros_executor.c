@@ -1,7 +1,6 @@
 #include "ros_executor.h"
 
 #include <inttypes.h>
-#include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -10,14 +9,16 @@
 #include "esp_timer.h"
 
 #include <rcl/rcl.h>
+#include <rcl/context.h>
 #include <rcl/error_handling.h>
 #include <rclc/executor.h>
 #include <rclc/rclc.h>
 #include <rmw_microros/rmw_microros.h>
+#include <rmw_microros/timing.h>
 
 #include "control/command_mux.h"
 #include "network/uros_transport.h"
-#include "network/wifi_manager.h"
+#include "ros_interface/ros_executor_policy.h"
 #include "ros_interface/ros_publishers.h"
 #include "ros_interface/ros_health.h"
 #include "ros_interface/ros_subscribers.h"
@@ -36,7 +37,7 @@ static bool s_session_active = false;
 static const char *ros_executor_disconnect_reason_name(ros_disconnect_reason_t reason)
 {
     switch (reason) {
-    case ROS_DISCONNECT_WIFI: return "wifi";
+    case ROS_DISCONNECT_TRANSPORT: return "transport";
     case ROS_DISCONNECT_EXECUTOR: return "executor";
     case ROS_DISCONNECT_PUBLISHER: return "publisher";
     case ROS_DISCONNECT_AGENT_PING: return "agent_ping";
@@ -82,7 +83,7 @@ static esp_err_t ros_executor_connect_support(rclc_support_t *support, rcl_alloc
     }
 
     if (uros_transport_init(rcl_init_options_get_rmw_init_options(&init_options)) != ESP_OK) {
-        ESP_LOGE(TAG, "configure UDP transport failed");
+        ESP_LOGE(TAG, "configure serial transport failed");
         ros_executor_log_rcl_ret("rcl_init_options_fini", rcl_init_options_fini(&init_options));
         return ESP_FAIL;
     }
@@ -97,12 +98,15 @@ static esp_err_t ros_executor_connect_support(rclc_support_t *support, rcl_alloc
     rc = rclc_support_init_with_options(support, 0, NULL, &init_options, allocator);
     ros_executor_log_rcl_ret("rcl_init_options_fini", rcl_init_options_fini(&init_options));
     if (rc != RCL_RET_OK) {
-        ESP_LOGW(
-            TAG,
-            "agent connect failed: %d (%s:%s)",
-            (int)rc,
-            uros_transport_get_agent_ip(),
-            uros_transport_get_agent_port());
+        ESP_LOGW(TAG, "serial agent connect failed: %d", (int)rc);
+        return ESP_FAIL;
+    }
+
+    rmw_context_t *rmw_context = rcl_context_get_rmw_context(&support->context);
+    if (rmw_context == NULL ||
+        rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0) != RMW_RET_OK) {
+        ESP_LOGE(TAG, "configure non-blocking entity cleanup failed");
+        ros_executor_log_rcl_ret("rclc_support_fini", rclc_support_fini(support));
         return ESP_FAIL;
     }
 
@@ -122,13 +126,6 @@ static void ros_executor_task(void *arg)
         bool node_ready = false;
         bool executor_ready = false;
 
-        if (!wifi_manager_is_connected()) {
-            s_last_disconnect_reason = ROS_DISCONNECT_WIFI;
-            ros_executor_stop_ros_motion();
-            vTaskDelay(pdMS_TO_TICKS(500));
-            continue;
-        }
-
         if (ros_executor_connect_support(&support, &allocator) != ESP_OK) {
             s_last_disconnect_reason = ROS_DISCONNECT_ENTITY_INIT;
             ros_executor_stop_ros_motion();
@@ -137,11 +134,7 @@ static void ros_executor_task(void *arg)
         }
         support_ready = true;
 
-        ESP_LOGI(
-            TAG,
-            "connected to micro-ROS agent %s:%s",
-            uros_transport_get_agent_ip(),
-            uros_transport_get_agent_port());
+        ESP_LOGI(TAG, "connected to micro-ROS serial agent");
 
         if (rclc_node_init_default(&node, ROS_NODE_NAME, CONFIG_CARBOT_MICRO_ROS_NAMESPACE, &support) != RCL_RET_OK) {
             ESP_LOGE(TAG, "node init failed");
@@ -180,9 +173,10 @@ static void ros_executor_task(void *arg)
 
         int64_t last_health_check_ms = s_session_started_us / 1000;
         int64_t last_time_sync_ms = last_health_check_ms;
-        while (wifi_manager_is_connected()) {
+        while (uros_transport_is_open()) {
             rcl_ret_t rc = rclc_executor_spin_some(&executor, RCL_MS_TO_NS(CONFIG_CARBOT_MICRO_ROS_SPIN_PERIOD_MS));
-            if (rc != RCL_RET_OK) {
+            if (!ros_executor_spin_result_is_normal(
+                    rc == RCL_RET_OK, rc == RCL_RET_TIMEOUT)) {
                 ESP_LOGE(TAG, "executor spin failed: %d", (int)rc);
                 s_last_disconnect_reason = ROS_DISCONNECT_EXECUTOR;
                 break;
@@ -225,8 +219,8 @@ static void ros_executor_task(void *arg)
             }
             vTaskDelay(pdMS_TO_TICKS(1));
         }
-        if (!wifi_manager_is_connected()) {
-            s_last_disconnect_reason = ROS_DISCONNECT_WIFI;
+        if (!uros_transport_is_open()) {
+            s_last_disconnect_reason = ROS_DISCONNECT_TRANSPORT;
         }
 
 cleanup:
@@ -285,7 +279,6 @@ uint64_t ros_executor_get_session_uptime_ms(void)
 void ros_executor_start(void)
 {
     if (!CONFIG_CARBOT_MICRO_ROS_ENABLED) {
-        printf("ros executor disabled\n");
         return;
     }
 
@@ -294,16 +287,21 @@ void ros_executor_start(void)
     }
 
     if (ros_subscribers_start_watchdog() != ESP_OK) {
-        printf("ros cmd_vel watchdog start failed\n");
         return;
     }
 
-    printf("ros executor start\n");
-    xTaskCreate(
+    BaseType_t task_result = xTaskCreate(
         ros_executor_task,
         "micro_ros_task",
         CONFIG_CARBOT_MICRO_ROS_TASK_STACK,
         NULL,
         CONFIG_CARBOT_MICRO_ROS_TASK_PRIO,
         &s_ros_task_handle);
+    if (task_result != pdPASS) {
+        s_ros_task_handle = NULL;
+        ESP_LOGE(TAG, "micro-ROS task creation failed: %ld", (long)task_result);
+        return;
+    }
+
+    ESP_LOGI(TAG, "micro-ROS task started; serial Agent ping loop active");
 }

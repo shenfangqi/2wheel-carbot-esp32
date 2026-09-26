@@ -4,11 +4,7 @@ idf_component_register(
 
         "app_config/app_config.c"
         "app_config/config_store.c"
-        "app_config/usb_config_cli.c"
-
-        "network/wifi_manager.c"
         "network/uros_transport.c"
-        "network/web_server.c"
 
         "drivers/servo_driver.c"
         "drivers/motor_driver.c"
@@ -45,12 +41,8 @@ idf_component_register(
             esp_adc
             icm42670p
             esp_timer
-		    esp_wifi
-		    esp_event
-		    esp_netif
 		    nvs_flash
 		    esp_driver_uart
             esp_driver_mcpwm
             micro_ros_espidf_component
-        esp_http_server
 )

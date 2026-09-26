@@ -28,33 +28,6 @@ void command_mux_init(void)
     portEXIT_CRITICAL(&s_command_mux_lock);
 }
 
-void command_mux_apply_web_cmd(float linear_mps, float angular_rps)
-{
-    if (!safety_manager_validate(linear_mps, angular_rps)) {
-        portENTER_CRITICAL(&s_command_mux_lock);
-        s_invalid_command_count++;
-        portEXIT_CRITICAL(&s_command_mux_lock);
-        return;
-    }
-    if (command_mux_is_motion_blocked()) {
-        differential_controller_stop();
-        servo_controller_center();
-        return;
-    }
-
-    command_mux_set_source(COMMAND_SOURCE_WEB);
-    differential_controller_set_cmd(linear_mps, angular_rps);
-}
-
-void command_mux_stop_web(bool center_steering)
-{
-    command_mux_set_source(COMMAND_SOURCE_WEB);
-    differential_controller_stop();
-    if (center_steering) {
-        servo_controller_center();
-    }
-}
-
 void command_mux_apply_ros_cmd(float linear_mps, float angular_rps)
 {
     if (!safety_manager_validate(linear_mps, angular_rps)) {
