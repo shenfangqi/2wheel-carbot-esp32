@@ -34,6 +34,15 @@
    ROS 时间，并记录测试期间最大偏差。
 5. ESP32 重启后确认 `boot_id` 改变，Jetson 重置轮计数增量基准且不产生里程计跳变。
 
+## 电池断开与恢复
+
+1. 不发送任何非零命令，保持 Jetson USB 连接并关闭整车电源。
+2. 确认蜂鸣器/指示灯告警，`/battery_state` 和 `/carbot/status` 仍持续发布，
+   且 `battery_low=true`、`motion_blocked=true`、`active_command_source=0`。
+3. 保持 USB 连接至少 60 秒，确认 ESP32 不进入深度睡眠且 Agent session 不中断。
+4. 恢复整车电源，确认电压超过 6.90 V 后告警消失、`motion_blocked=false`，
+   但 `active_command_source` 仍为 0，车辆不会自动恢复旧命令。
+
 ## 通过条件
 
 - 上述测试全部记录实际结果；任何仅由编译或 host 单元测试覆盖的项目不能标记为

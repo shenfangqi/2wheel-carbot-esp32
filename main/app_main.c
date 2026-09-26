@@ -2,9 +2,9 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
-#include "esp_sleep.h"
 
 #include "app_config/app_config.h"
+#include "control/battery_safety_policy.h"
 #include "control/differential_controller.h"
 #include "control/command_mux.h"
 #include "control/motor_pid_controller.h"
@@ -20,62 +20,57 @@
 static const char *TAG = "app_main";
 static const int PID_LOG_PERIOD_MS = 100;
 static const int LOW_VOLTAGE_BLINK_PERIOD_MS = 200;
-static const int LOW_VOLTAGE_ALARM_DURATION_MS = 30000;
 static const int STARTUP_OK_BEEP_MS = 120;
 static bool s_imu_ready_for_telemetry = false;
+static battery_safety_state_t s_battery_safety_state = BATTERY_SAFETY_NORMAL;
+static TickType_t s_low_voltage_last_toggle_tick;
 
-static void app_enter_low_voltage_alarm(float voltage, const char *phase, bool stop_motion)
+static void app_update_battery_safety(void)
 {
-    ESP_LOGE(
-        TAG,
-        "%s battery voltage too low: %.2fV < %.2fV",
-        phase,
-        voltage,
-        BATTERY_LOW_VOLTAGE_ENTER_V);
+    const bool battery_low = battery_monitor_is_low();
+    battery_safety_transition_t transition =
+        battery_safety_update(&s_battery_safety_state, battery_low);
 
-    if (stop_motion) {
+    if (transition == BATTERY_SAFETY_ENTER_ALARM) {
+        ESP_LOGE(TAG, "battery low/disconnected: %.2fV; motion blocked",
+                 battery_monitor_get_voltage());
         command_mux_set_motion_blocked(true);
+        status_led_on();
+        buzzer_on();
+        s_low_voltage_last_toggle_tick = xTaskGetTickCount();
+    } else if (transition == BATTERY_SAFETY_EXIT_ALARM) {
+        ESP_LOGI(TAG, "battery recovered: %.2fV; new command required",
+                 battery_monitor_get_voltage());
+        buzzer_off();
+        status_led_off();
+        command_mux_set_motion_blocked(false);
     }
 
-    status_led_on();
-    buzzer_on();
-    for (int elapsed_ms = 0;
-         elapsed_ms < LOW_VOLTAGE_ALARM_DURATION_MS;
-         elapsed_ms += LOW_VOLTAGE_BLINK_PERIOD_MS) {
-        vTaskDelay(pdMS_TO_TICKS(LOW_VOLTAGE_BLINK_PERIOD_MS));
+    if (s_battery_safety_state == BATTERY_SAFETY_ALARM &&
+        xTaskGetTickCount() - s_low_voltage_last_toggle_tick >=
+            pdMS_TO_TICKS(LOW_VOLTAGE_BLINK_PERIOD_MS)) {
         status_led_toggle();
         buzzer_toggle();
+        s_low_voltage_last_toggle_tick = xTaskGetTickCount();
     }
-
-    buzzer_off();
-    status_led_off();
-
-    if (stop_motion) {
-        /* Release the motor brake before sleeping to minimize external load. */
-        motor_pid_controller_stop(false);
-    }
-
-    ESP_ERROR_CHECK(esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL));
-    esp_deep_sleep_start();
 }
 
-static void app_handle_startup_low_voltage(void)
+static void app_signal_healthy_startup(void)
 {
     if (!battery_monitor_wait_ready(1000)) {
         ESP_LOGW(TAG, "battery voltage not ready during startup check");
         return;
     }
 
-    const float startup_voltage = battery_monitor_get_voltage();
-
-    if (!battery_monitor_is_low()) {
-        buzzer_on();
-        vTaskDelay(pdMS_TO_TICKS(STARTUP_OK_BEEP_MS));
-        buzzer_off();
+    if (battery_monitor_is_low()) {
+        ESP_LOGW(TAG, "startup battery low/disconnected: %.2fV; continuing in blocked mode",
+                 battery_monitor_get_voltage());
         return;
     }
 
-    app_enter_low_voltage_alarm(startup_voltage, "startup", false);
+    buzzer_on();
+    vTaskDelay(pdMS_TO_TICKS(STARTUP_OK_BEEP_MS));
+    buzzer_off();
 }
 
 static void app_log_pid_status(const char *phase)
@@ -136,7 +131,7 @@ void app_main(void)
     status_led_init();
     buzzer_init();
     battery_monitor_init();
-    app_handle_startup_low_voltage();
+    app_signal_healthy_startup();
 
     app_config_init();
     config = app_config_get();
@@ -149,6 +144,7 @@ void app_main(void)
 
     differential_controller_init();
     command_mux_init();
+    app_update_battery_safety();
     motor_pid_controller_set_pid(0.8f, 0.15f, 0.0f);
     odometry_estimator_init();
     telemetry_buffer_init();
@@ -156,9 +152,7 @@ void app_main(void)
     ros_executor_start();
 
     while (1) {
-        if (battery_monitor_is_low()) {
-            app_enter_low_voltage_alarm(battery_monitor_get_voltage(), "runtime", true);
-        }
+        app_update_battery_safety();
         app_log_pid_status("idle");
         vTaskDelay(pdMS_TO_TICKS(PID_LOG_PERIOD_MS));
     }
