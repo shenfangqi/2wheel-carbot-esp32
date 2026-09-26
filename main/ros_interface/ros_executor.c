@@ -278,11 +278,18 @@ void ros_executor_start(void)
         return;
     }
 
-    xTaskCreate(
+    BaseType_t task_result = xTaskCreate(
         ros_executor_task,
         "micro_ros_task",
         CONFIG_CARBOT_MICRO_ROS_TASK_STACK,
         NULL,
         CONFIG_CARBOT_MICRO_ROS_TASK_PRIO,
         &s_ros_task_handle);
+    if (task_result != pdPASS) {
+        s_ros_task_handle = NULL;
+        ESP_LOGE(TAG, "micro-ROS task creation failed: %ld", (long)task_result);
+        return;
+    }
+
+    ESP_LOGI(TAG, "micro-ROS task started; serial Agent ping loop active");
 }

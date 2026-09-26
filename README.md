@@ -101,7 +101,7 @@ topics `/wheel_ticks`、`/imu/data_raw`、`/battery_state` 和 `/carbot/status` 
 当前约定：
 
 - Host：Jetson，ROS 2 Humble
-- Transport：CP2102 USB-UART，UART0，921600 8N1
+- Transport：CP2102 USB-UART，UART0（TX GPIO43 / RX GPIO44），921600 8N1
 - ROS Domain ID：0
 - Node：`/carbot_base`
 - Subscriber：`/cmd_vel`，类型 `geometry_msgs/msg/Twist`

@@ -129,6 +129,8 @@ void app_main(void)
 
     nvs_flash_init();
     esp_log_level_set("*", ESP_LOG_ERROR);
+    esp_log_level_set("uros_transport", ESP_LOG_INFO);
+    esp_log_level_set("ros_executor", ESP_LOG_INFO);
 
     status_led_init();
     buzzer_init();

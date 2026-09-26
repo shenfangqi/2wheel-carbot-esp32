@@ -4,16 +4,17 @@
 #include <stdint.h>
 
 #include "driver/uart.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
 #include <uxr/client/transport.h>
 
 #include "network/uros_serial_io.h"
 
-#define UROS_UART_PORT UART_NUM_0
 #define UROS_UART_RX_BUFFER_SIZE 2048
 #define UROS_UART_TX_BUFFER_SIZE 2048
 
+static const char *TAG = "uros_transport";
 static const uart_port_t s_uart_port = UROS_UART_PORT;
 static portMUX_TYPE s_transport_lock = portMUX_INITIALIZER_UNLOCKED;
 static uros_serial_state_t s_transport_state = UROS_SERIAL_CLOSED;
@@ -39,17 +40,48 @@ static bool uros_serial_open(struct uxrCustomTransport *transport)
 
     uros_transport_apply_event(UROS_SERIAL_EVENT_OPEN_BEGIN);
     /* Cleanup from a failed/abandoned session must not poison the next open. */
-    uart_driver_delete(port);
-    if (uart_param_config(port, &config) != ESP_OK ||
-        uart_set_pin(port, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE,
-                     UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) != ESP_OK ||
-        uart_driver_install(port, UROS_UART_RX_BUFFER_SIZE,
-                            UROS_UART_TX_BUFFER_SIZE, 0, NULL, 0) != ESP_OK) {
+    esp_err_t result = uart_driver_delete(port);
+    if (result != ESP_OK && result != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "UART%d stale driver cleanup failed: %s", port, esp_err_to_name(result));
+        uros_transport_apply_event(UROS_SERIAL_EVENT_IO_ERROR);
+        return false;
+    }
+
+    result = uart_param_config(port, &config);
+    if (result != ESP_OK) {
+        ESP_LOGE(TAG, "UART%d parameter configuration failed: %s", port, esp_err_to_name(result));
+        uros_transport_apply_event(UROS_SERIAL_EVENT_IO_ERROR);
+        return false;
+    }
+
+    result = uart_set_pin(port, UROS_UART_TX_GPIO, UROS_UART_RX_GPIO,
+                          UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    if (result != ESP_OK) {
+        ESP_LOGE(TAG, "UART%d GPIO routing TX=%d RX=%d failed: %s",
+                 port, UROS_UART_TX_GPIO, UROS_UART_RX_GPIO, esp_err_to_name(result));
+        uros_transport_apply_event(UROS_SERIAL_EVENT_IO_ERROR);
+        return false;
+    }
+
+    result = uart_driver_install(port, UROS_UART_RX_BUFFER_SIZE,
+                                 UROS_UART_TX_BUFFER_SIZE, 0, NULL, 0);
+    if (result != ESP_OK) {
+        ESP_LOGE(TAG, "UART%d driver install failed: %s", port, esp_err_to_name(result));
         uart_driver_delete(port);
         uros_transport_apply_event(UROS_SERIAL_EVENT_IO_ERROR);
         return false;
     }
-    uart_flush_input(port);
+
+    result = uart_flush_input(port);
+    if (result != ESP_OK) {
+        ESP_LOGE(TAG, "UART%d input flush failed: %s", port, esp_err_to_name(result));
+        uart_driver_delete(port);
+        uros_transport_apply_event(UROS_SERIAL_EVENT_IO_ERROR);
+        return false;
+    }
+
+    ESP_LOGI(TAG, "UART%d ready: TX=%d RX=%d baud=%d 8N1 no-flow-control",
+             port, UROS_UART_TX_GPIO, UROS_UART_RX_GPIO, UROS_SERIAL_BAUD_RATE);
     uros_transport_apply_event(UROS_SERIAL_EVENT_OPEN_OK);
     return true;
 }
