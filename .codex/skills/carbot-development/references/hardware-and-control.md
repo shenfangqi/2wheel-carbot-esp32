@@ -56,6 +56,7 @@ Confirm the physical board schematic before changing pin assignments. Some ESP32
 - Sample period: 100 ms.
 - ADC attenuation: 12 dB; curve-fitting calibration is used when available, otherwise a 3.3 V/12-bit approximation is used.
 - Battery scale: `GPIO voltage * 8.16`.
+- Below 1.0 V is classified as battery absent: motion remains blocked and communication remains active, but the audible/visual low-voltage alarm is suppressed.
 - Enter-low threshold: 6.60 V; release threshold in the monitor state: 6.90 V.
 - Application alarm handling is non-blocking. It keeps UART/micro-ROS alive, blocks and stops motion while low, and clears only after the 6.90 V release threshold. Clearing does not replay an old command.
 

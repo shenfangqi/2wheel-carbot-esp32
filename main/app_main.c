@@ -22,37 +22,54 @@ static const int PID_LOG_PERIOD_MS = 100;
 static const int LOW_VOLTAGE_BLINK_PERIOD_MS = 200;
 static const int STARTUP_OK_BEEP_MS = 120;
 static bool s_imu_ready_for_telemetry = false;
-static battery_safety_state_t s_battery_safety_state = BATTERY_SAFETY_NORMAL;
+static battery_safety_state_t s_battery_safety_state = BATTERY_SAFETY_ABSENT;
 static TickType_t s_low_voltage_last_toggle_tick;
 
 static void app_update_battery_safety(void)
 {
-    const bool battery_low = battery_monitor_is_low();
-    battery_safety_transition_t transition =
-        battery_safety_update(&s_battery_safety_state, battery_low);
+    battery_safety_state_t next_state = battery_safety_classify(
+        battery_monitor_is_present(), battery_monitor_is_low());
 
-    if (transition == BATTERY_SAFETY_ENTER_ALARM) {
-        ESP_LOGE(TAG, "battery low/disconnected: %.2fV; motion blocked",
-                 battery_monitor_get_voltage());
-        command_mux_set_motion_blocked(true);
-        status_led_on();
-        buzzer_on();
-        s_low_voltage_last_toggle_tick = xTaskGetTickCount();
-    } else if (transition == BATTERY_SAFETY_EXIT_ALARM) {
-        ESP_LOGI(TAG, "battery recovered: %.2fV; new command required",
-                 battery_monitor_get_voltage());
+    if (next_state != s_battery_safety_state) {
+        bool was_blocked = battery_safety_blocks_motion(s_battery_safety_state);
+        bool is_blocked = battery_safety_blocks_motion(next_state);
+        if (!was_blocked && is_blocked) {
+            command_mux_set_motion_blocked(true);
+        } else if (was_blocked && !is_blocked) {
+            command_mux_set_motion_blocked(false);
+        }
+
         buzzer_off();
         status_led_off();
-        command_mux_set_motion_blocked(false);
+        if (next_state == BATTERY_SAFETY_LOW) {
+            ESP_LOGE(TAG, "battery low: %.2fV; motion blocked",
+                     battery_monitor_get_voltage());
+            status_led_on();
+            buzzer_on();
+        } else if (next_state == BATTERY_SAFETY_ABSENT) {
+            ESP_LOGW(TAG, "battery absent: %.2fV; motion blocked silently",
+                     battery_monitor_get_voltage());
+        } else {
+            ESP_LOGI(TAG, "battery recovered: %.2fV; new command required",
+                     battery_monitor_get_voltage());
+        }
+        s_battery_safety_state = next_state;
+        s_low_voltage_last_toggle_tick = xTaskGetTickCount();
     }
 
-    if (s_battery_safety_state == BATTERY_SAFETY_ALARM &&
+    if (battery_safety_should_alarm(s_battery_safety_state) &&
         xTaskGetTickCount() - s_low_voltage_last_toggle_tick >=
             pdMS_TO_TICKS(LOW_VOLTAGE_BLINK_PERIOD_MS)) {
         status_led_toggle();
         buzzer_toggle();
         s_low_voltage_last_toggle_tick = xTaskGetTickCount();
     }
+}
+
+static void app_apply_initial_battery_safety(void)
+{
+    s_battery_safety_state = BATTERY_SAFETY_NORMAL;
+    app_update_battery_safety();
 }
 
 static void app_signal_healthy_startup(void)
@@ -62,8 +79,14 @@ static void app_signal_healthy_startup(void)
         return;
     }
 
+    if (!battery_monitor_is_present()) {
+        ESP_LOGW(TAG, "startup battery absent: %.2fV; continuing silently in blocked mode",
+                 battery_monitor_get_voltage());
+        return;
+    }
+
     if (battery_monitor_is_low()) {
-        ESP_LOGW(TAG, "startup battery low/disconnected: %.2fV; continuing in blocked mode",
+        ESP_LOGE(TAG, "startup battery low: %.2fV; continuing in blocked alarm mode",
                  battery_monitor_get_voltage());
         return;
     }
@@ -144,7 +167,7 @@ void app_main(void)
 
     differential_controller_init();
     command_mux_init();
-    app_update_battery_safety();
+    app_apply_initial_battery_safety();
     motor_pid_controller_set_pid(0.8f, 0.15f, 0.0f);
     odometry_estimator_init();
     telemetry_buffer_init();

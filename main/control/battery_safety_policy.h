@@ -4,25 +4,28 @@
 
 typedef enum {
     BATTERY_SAFETY_NORMAL = 0,
-    BATTERY_SAFETY_ALARM,
+    BATTERY_SAFETY_ABSENT,
+    BATTERY_SAFETY_LOW,
 } battery_safety_state_t;
 
-typedef enum {
-    BATTERY_SAFETY_NO_CHANGE = 0,
-    BATTERY_SAFETY_ENTER_ALARM,
-    BATTERY_SAFETY_EXIT_ALARM,
-} battery_safety_transition_t;
-
-static inline battery_safety_transition_t battery_safety_update(
-    battery_safety_state_t *state, bool battery_low)
+static inline battery_safety_state_t battery_safety_classify(
+    bool battery_present, bool battery_low)
 {
-    if (battery_low && *state == BATTERY_SAFETY_NORMAL) {
-        *state = BATTERY_SAFETY_ALARM;
-        return BATTERY_SAFETY_ENTER_ALARM;
+    if (!battery_present) {
+        return BATTERY_SAFETY_ABSENT;
     }
-    if (!battery_low && *state == BATTERY_SAFETY_ALARM) {
-        *state = BATTERY_SAFETY_NORMAL;
-        return BATTERY_SAFETY_EXIT_ALARM;
+    if (battery_low) {
+        return BATTERY_SAFETY_LOW;
     }
-    return BATTERY_SAFETY_NO_CHANGE;
+    return BATTERY_SAFETY_NORMAL;
+}
+
+static inline bool battery_safety_blocks_motion(battery_safety_state_t state)
+{
+    return state != BATTERY_SAFETY_NORMAL;
+}
+
+static inline bool battery_safety_should_alarm(battery_safety_state_t state)
+{
+    return state == BATTERY_SAFETY_LOW;
 }

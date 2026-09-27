@@ -69,7 +69,8 @@ Critical sections protect command ownership/motion block state and PID shared st
 
 ## Safety semantics
 
-- Startup or runtime low voltage: motion is globally blocked, ownership is cleared, both tracks brake, and the buzzer/LED toggle every 200 ms. UART and micro-ROS remain active even when USB powers the controller with the vehicle battery disconnected.
+- A disconnected battery below 1.0 V silently blocks motion, clears ownership, and brakes both tracks while UART and micro-ROS remain active under USB power.
+- A present but low battery at or below 6.60 V applies the same motion block and also toggles the buzzer/LED every 200 ms.
 - Battery recovery above 6.90 V clears the alarm and motion block, but ownership remains `NONE`; a new valid command is required.
 - ROS watchdog: after the first received command, no new message for 500 ms stops ROS-owned track motion.
 - Serial transport/session failure calls the ROS stop path.
