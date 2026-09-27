@@ -9,6 +9,8 @@ extern "C" {
 
 #define BATTERY_MONITOR_GPIO               3
 #define BATTERY_MONITOR_VOLTAGE_SCALE      4.05f
+/* USB-only power backfeeds the divider as about 3.96 V on this board. */
+#define BATTERY_ABSENT_MAX_V                5.0f
 
 /* Temporary 2S (7.4 V nominal, 8.4 V full) lithium battery profile. */
 #define BATTERY_SERIES_CELL_COUNT           2.0f
@@ -20,6 +22,7 @@ extern "C" {
 void battery_monitor_init(void);
 bool battery_monitor_wait_ready(uint32_t timeout_ms);
 float battery_monitor_get_voltage(void);
+bool battery_monitor_is_present(void);
 bool battery_monitor_is_low(void);
 
 #ifdef __cplusplus

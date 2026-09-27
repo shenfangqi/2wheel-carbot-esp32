@@ -144,6 +144,11 @@ float battery_monitor_get_voltage(void)
     return s_battery_voltage;
 }
 
+bool battery_monitor_is_present(void)
+{
+    return s_battery_ready && s_battery_voltage >= BATTERY_ABSENT_MAX_V;
+}
+
 bool battery_monitor_is_low(void)
 {
     return s_battery_ready && s_battery_low;
