@@ -37,7 +37,7 @@
 ## 电池断开与恢复
 
 1. 不发送任何非零命令，保持 Jetson USB 连接并关闭整车电源。
-2. 确认电池未接（低于 1.0 V）时蜂鸣器保持静默，`/battery_state` 和 `/carbot/status` 仍持续发布，
+2. 确认电池未接（低于 5.0 V；本机仅 USB 供电时实测约 3.96 V）时蜂鸣器保持静默，`/battery_state` 和 `/carbot/status` 仍持续发布，
    且 `battery_low=true`、`motion_blocked=true`、`active_command_source=0`。
 3. 保持 USB 连接至少 60 秒，确认 ESP32 不进入深度睡眠且 Agent session 不中断。
 4. 恢复整车电源，确认电压超过 6.90 V 后告警消失、`motion_blocked=false`，

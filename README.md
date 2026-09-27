@@ -91,7 +91,7 @@ ESP32 不提供 HTTP 服务或运动 API。手机手动操作由 Jetson 页面�
 内部 telemetry buffer 仍用于固件诊断，但不再通过 HTTP 导出。运行期遥测由 ROS
 topics `/wheel_ticks`、`/imu/data_raw`、`/battery_state` 和 `/carbot/status` 发布。
 整车电源关闭但 USB 仍在供电时，电池 ADC 会显示低电压/电池断开。
-低于 1.0 V 视为电池未接：固件会静默地清除命令归属、刹停并禁止运动，不会蜂鸣或进入永久深度睡眠。
+低于 5.0 V 视为电池未接（本机仅 USB 供电时实测约 3.96 V）：固件会静默地清除命令归属、刹停并禁止运动，不会蜂鸣或进入永久深度睡眠。
 检测到电池存在但低于 6.60 V 时，则保持蜂鸣和闪灯告警。
 UART/micro-ROS 保持运行，以便 `/battery_state` 和 `/carbot/status` 报告故障。
 电压恢复到 6.90 V 以上后解除阻止，但必须收到新的有效 `/cmd_vel` 才会运动。
