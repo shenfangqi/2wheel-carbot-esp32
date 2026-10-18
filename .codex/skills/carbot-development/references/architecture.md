@@ -14,7 +14,7 @@
 
 1. Initialize NVS and restrict global ESP logging to `ERROR`.
 2. Initialize status LED, buzzer, and the battery ADC task.
-3. Wait up to 1 second for a battery sample. A healthy battery produces a 120 ms beep. Voltage at or below 6.60 V enters a permanent alarm loop before the rest of the system starts.
+3. Wait up to 1 second for a battery sample. A healthy battery produces a 120 ms beep. At or below 6.60 V, startup continues so communication remains available, but motion is blocked after command arbitration initializes.
 4. Load defaults and then NVS overrides.
 5. Initialize the legacy servo and apply its persisted center offset; it is not part of current chassis kinematics.
 6. Initialize IMU, differential control, command arbitration, encoders, four motor driver handles, and the M1/M3 PID task.
@@ -69,8 +69,9 @@ Critical sections protect command ownership/motion block state and PID shared st
 
 ## Safety semantics
 
-- Startup low voltage: buzzer stays on, LED toggles every 200 ms, and startup does not proceed.
-- Runtime low voltage: motion is globally blocked, both tracks brake, buzzer stays on, LED toggles, and recovery requires reset/power cycle even if voltage rises. Legacy servo centering is incidental.
+- A disconnected battery below 1.0 V silently blocks motion, clears ownership, and brakes both tracks while UART and micro-ROS remain active under USB power.
+- A present but low battery at or below 6.60 V applies the same motion block and also toggles the buzzer/LED every 200 ms.
+- Battery recovery above 6.90 V clears the alarm and motion block, but ownership remains `NONE`; a new valid command is required.
 - ROS watchdog: after the first received command, no new message for 500 ms stops ROS-owned track motion.
 - Serial transport/session failure calls the ROS stop path.
 - Jetson manual control must publish continuously; loss of commands triggers the 500 ms watchdog. Treat the Jetson Stop control and physical power removal as separate safety layers, not as equivalent mechanisms.

@@ -12,6 +12,9 @@ cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   -o "$test_dir/test_safety_manager"
 "$test_dir/test_safety_manager"
 cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
+  "$repo_dir/tests/test_battery_safety_policy.c" -o "$test_dir/test_battery_safety_policy"
+"$test_dir/test_battery_safety_policy"
+cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   "$repo_dir/tests/test_command_source_values.c" -o "$test_dir/test_command_source_values"
 "$test_dir/test_command_source_values"
 cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/components/icm42670p" \
