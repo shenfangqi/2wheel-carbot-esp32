@@ -85,6 +85,7 @@ static void motor_pid_update_channel(motor_pid_channel_t *channel, float kp, flo
 {
     int current_count = encoder_driver_get_count(channel->encoder_id);
     int delta_count = current_count - channel->last_encoder_count;
+    float previous_integral = channel->integral;
     float error = 0.0f;
     float derivative = 0.0f;
     float output = 0.0f;
@@ -98,6 +99,12 @@ static void motor_pid_update_channel(motor_pid_channel_t *channel, float kp, flo
         channel->pwm_output = 0;
         motor_driver_stop(channel->motor_id, true);
         return;
+    }
+
+    channel->integral = motor_pid_integral_for_target(
+        channel->target_rpm, channel->integral);
+    if (channel->integral != previous_integral) {
+        channel->prev_error = 0.0f;
     }
 
     error = channel->target_rpm - channel->actual_rpm;
