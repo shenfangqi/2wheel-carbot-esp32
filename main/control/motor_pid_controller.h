@@ -14,6 +14,18 @@ typedef struct {
     int pwm_output;
 } motor_pid_telemetry_t;
 
+/* Keep accumulated effort only while it agrees with the requested direction. */
+static inline float motor_pid_integral_for_target(float target_rpm, float integral)
+{
+    if (target_rpm == 0.0f ||
+        (target_rpm > 0.0f && integral < 0.0f) ||
+        (target_rpm < 0.0f && integral > 0.0f)) {
+        return 0.0f;
+    }
+
+    return integral;
+}
+
 void motor_pid_controller_init(void);
 void motor_pid_controller_set_pid(float kp, float ki, float kd);
 void motor_pid_controller_set_target_rpm(float m1_target_rpm, float m3_target_rpm);

@@ -42,6 +42,10 @@ cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
   "$repo_dir/tests/test_differential_command.c" -lm \
   -o "$test_dir/test_differential_command"
 "$test_dir/test_differential_command"
+cc -std=c11 -Wall -Wextra -Werror -I"$repo_dir/main" \
+  "$repo_dir/tests/test_motor_pid_integral.c" \
+  -o "$test_dir/test_motor_pid_integral"
+"$test_dir/test_motor_pid_integral"
 
 grep -q '^uint64 sequence$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/WheelTicks.msg"
 grep -q '^uint32 boot_id$' "$repo_dir/extra_ros_packages/carbot_msgs/msg/WheelTicks.msg"
